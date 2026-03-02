@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            arch: x64
+            name: Windows x64
+            cmake-preset: default
+            cmake-args: ""
+
+          - os: windows-arm64
+            arch: arm64
+            name: Windows ARM64
+            cmake-preset: default
+            cmake-args: ""
+
+          - os: ubuntu-24.04
+            arch: x64
+            name: Linux x64
+            cmake-preset: default
+            cmake-args: ""
+
+          - os: ubuntu-24.04-arm
+            arch: arm64
+            name: Linux ARM64
+            cmake-preset: default
+            cmake-args: ""
+
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
+
+      - name: Install build tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq --no-install-recommends \
+            build-essential cmake ninja-build
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DMORTIS_BUILD_TESTS=ON
+          ${{ matrix.cmake-args }}
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        working-directory: build
+        run: ctest --build-config Release --output-on-failure --parallel

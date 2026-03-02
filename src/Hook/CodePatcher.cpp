@@ -70,8 +70,8 @@ auto PatchEntryAssumeWritable(void* target, const std::span<const std::uint8_t> 
 // UnpatchEntry
 auto UnpatchEntry(void* target, const std::span<const std::uint8_t> savedPrologue) -> Result<void> {
     const auto addr = reinterpret_cast<Address>(target);
-
-    if (const auto guard = ScopedProtect::Create(addr, savedPrologue.size(), MemoryProtection::ReadWriteExec); !guard) {
+    const auto guard = ScopedProtect::Create(addr, savedPrologue.size(), MemoryProtection::ReadWriteExec);
+    if (!guard) {
         return Result<void>::Err(ErrorCode::ProtectionFailed, "UnpatchEntry: cannot set RWX: " + guard.error());
     }
 
