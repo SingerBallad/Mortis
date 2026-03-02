@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstring>
+#include <limits>
 
 namespace Mortis::HookEngine {
 
@@ -131,6 +132,14 @@ auto RelocateInstructions(const PrologueInfo& prologue, const std::uint64_t tram
     for (const auto& decoded : prologue.instructions) {
         const auto origPC = decoded.address;
         const auto newPC  = trampolineBase + result.code.size();
+
+        if (srcOffset > std::numeric_limits<std::uint8_t>::max()
+            || result.code.size() > std::numeric_limits<std::uint8_t>::max()) {
+            return Result<RelocationResult>::Err(
+                ErrorCode::HookInstallFailed,
+                "Relocation offset exceeds uint8_t range at " + std::to_string(decoded.address)
+            );
+        }
 
         AlignEntry ae;
         ae.targetOffset     = static_cast<std::uint8_t>(srcOffset);

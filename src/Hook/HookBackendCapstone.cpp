@@ -83,6 +83,8 @@ static auto SkipJumpStubsSafe(void* code) -> void* {
     auto* pb = static_cast<std::uint8_t*>(code);
 
     for (int i = 0; i < 5; ++i) {
+        if (!Process::IsReadable(reinterpret_cast<Address>(pb), 16)) break;
+
 #ifdef MORTIS_ARCH_X64
         // FF 25: JMP [RIP+disp32] — IAT thunk
         if (pb[0] == X64::kGroupFF && pb[1] == X64::kJmpIndirect) {
@@ -207,7 +209,11 @@ auto Install(void*& target, void* detour, int priority, void** originalPtrLocati
     }
 
     // First hook on this target
-    Disassembler disasm;
+    auto disasmResult = Disassembler::Create();
+    if (!disasmResult) {
+        return Result<void>::Err(disasmResult.code(), disasmResult.error());
+    }
+    auto& disasm = *disasmResult;
 
     // decode at least kJumpSize bytes.
     constexpr std::size_t kMaxPrologueBytes = 64;
@@ -294,6 +300,9 @@ auto Install(void*& target, void* detour, int priority, void** originalPtrLocati
     {
         auto freezerResult = ThreadFreezer::Create();
         if (!freezerResult) {
+#ifdef MORTIS_OS_LINUX
+            (void)Process::SetProtectionRaw(patchAddr, patchSize, oldProt.value());
+#endif
             TrampolineAllocator::Instance().free(slot.data());
             return Result<void>::Err(freezerResult.code(), freezerResult.error());
         }
@@ -341,7 +350,7 @@ auto Install(void*& target, void* detour, int priority, void** originalPtrLocati
 
     // Set the original-function pointer for the first chain node.
     if (originalPtrLocation) {
-        *originalPtrLocation = trampolineCallable;
+        std::atomic_ref<void*>(*originalPtrLocation).store(trampolineCallable, std::memory_order_release);
     }
 
     HookRegistry::Instance().add(trampolineCallable, std::move(entry));
@@ -399,6 +408,9 @@ auto Remove(void*& target, const void* detour) -> Result<void> {
         {
             const auto freezerResult = ThreadFreezer::Create();
             if (!freezerResult) {
+#ifdef MORTIS_OS_LINUX
+                (void)Process::SetProtectionRaw(patchAddr, patchSize, oldProt.value());
+#endif
                 return Result<void>::Err(freezerResult.code(), freezerResult.error());
             }
             const auto& freezer = *freezerResult;

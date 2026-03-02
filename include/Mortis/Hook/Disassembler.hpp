@@ -4,6 +4,7 @@
 
 #include <capstone/capstone.h>
 
+#include <utility>
 #include <vector>
 
 namespace Mortis::HookEngine {
@@ -25,11 +26,22 @@ struct PrologueInfo {
 /// @brief Wrapper around the Capstone disassembly engine.
 class Disassembler {
 public:
-    Disassembler();
+    /// @brief Factory: initialise Capstone and return a ready Disassembler.
+    [[nodiscard]] static auto Create() -> Result<Disassembler>;
+
     ~Disassembler();
 
     Disassembler(const Disassembler&)                    = delete;
     auto operator=(const Disassembler&) -> Disassembler& = delete;
+
+    Disassembler(Disassembler&& other) noexcept : handle_(std::exchange(other.handle_, 0)) {}
+    auto operator=(Disassembler&& other) noexcept -> Disassembler& {
+        if (this != &other) {
+            if (handle_) cs_close(&handle_);
+            handle_ = std::exchange(other.handle_, 0);
+        }
+        return *this;
+    }
 
     /// @brief Disassemble a function's prologue for relocation.
     [[nodiscard]] auto analyzePrologue(void* target, std::size_t minBytes, std::size_t maxBytes = 64) const
@@ -48,6 +60,7 @@ public:
     [[nodiscard]] auto handle() const noexcept -> csh { return handle_; }
 
 private:
+    Disassembler() = default;
     csh handle_ = 0;
 };
 

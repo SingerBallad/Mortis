@@ -133,6 +133,8 @@ void ThreadFreezer::remapThreadIPs(
     void*                             trampoline,
     const std::span<const AlignEntry> alignMap
 ) const {
+    if (alignMap.empty()) return;
+
     const auto targetAddr     = reinterpret_cast<std::uint64_t>(target);
     const auto trampolineAddr = reinterpret_cast<std::uint64_t>(trampoline);
 
@@ -144,13 +146,20 @@ void ThreadFreezer::remapThreadIPs(
         const auto ip = GetIp(ctx);
         if (ip < targetAddr || ip >= targetAddr + prologueSize) continue;
 
-        const auto offset = static_cast<std::uint8_t>(ip - targetAddr);
-        for (const auto& [targetOffset, trampolineOffset] : alignMap) {
-            if (targetOffset == offset) {
-                SetIp(ctx, trampolineAddr + trampolineOffset);
+        const auto offset = ip - targetAddr;
+        bool remapped = false;
+        for (std::size_t i = 0; i + 1 < alignMap.size(); ++i) {
+            if (offset >= alignMap[i].targetOffset && offset < alignMap[i + 1].targetOffset) {
+                const auto delta = offset - alignMap[i].targetOffset;
+                SetIp(ctx, trampolineAddr + alignMap[i].trampolineOffset + delta);
                 SetThreadContext(h, &ctx);
+                remapped = true;
                 break;
             }
+        }
+        if (!remapped && offset == alignMap.back().targetOffset) {
+            SetIp(ctx, trampolineAddr + alignMap.back().trampolineOffset);
+            SetThreadContext(h, &ctx);
         }
     }
 }
@@ -174,13 +183,21 @@ void ThreadFreezer::reverseRemapThreadIPs(
         const auto ip = GetIp(ctx);
         if (ip < trampolineAddr || ip >= trampolineAddr + relocatedSize) continue;
 
-        const auto offset = static_cast<std::uint8_t>(ip - trampolineAddr);
-        for (const auto& [targetOffset, trampolineOffset] : alignMap) {
-            if (trampolineOffset == offset) {
-                SetIp(ctx, targetAddr + targetOffset);
+        const auto offset = ip - trampolineAddr;
+        bool remapped = false;
+        for (std::size_t i = 0; i + 1 < alignMap.size(); ++i) {
+            if (offset >= alignMap[i].trampolineOffset && offset < alignMap[i + 1].trampolineOffset) {
+                const auto delta = offset - alignMap[i].trampolineOffset;
+                SetIp(ctx, targetAddr + alignMap[i].targetOffset + delta);
                 SetThreadContext(h, &ctx);
+                remapped = true;
                 break;
             }
+        }
+
+        if (!remapped && offset == alignMap.back().trampolineOffset) {
+            SetIp(ctx, targetAddr + alignMap.back().targetOffset);
+            SetThreadContext(h, &ctx);
         }
     }
 }

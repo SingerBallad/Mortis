@@ -5,22 +5,26 @@
 
 #include <cstring>
 #include <format>
-#include <stdexcept>
 
 namespace Mortis::HookEngine {
 
 // Construction / destruction
-Disassembler::Disassembler() {
+auto Disassembler::Create() -> Result<Disassembler> {
+    Disassembler disasm;
     cs_err err{};
 #ifdef MORTIS_ARCH_X64
-    err = cs_open(CS_ARCH_X86, CS_MODE_64, &handle_);
+    err = cs_open(CS_ARCH_X86, CS_MODE_64, &disasm.handle_);
 #elif defined(MORTIS_ARCH_ARM64)
-    err = cs_open(CS_ARCH_AARCH64, CS_MODE_ARM, &handle_);
+    err = cs_open(CS_ARCH_AARCH64, CS_MODE_ARM, &disasm.handle_);
 #endif
     if (err != CS_ERR_OK) {
-        throw std::runtime_error(std::format("[Mortis] cs_open failed: {}", cs_strerror(err)));
+        return Result<Disassembler>::Err(
+            ErrorCode::HookInstallFailed,
+            std::format("[Mortis] cs_open failed: {}", cs_strerror(err))
+        );
     }
-    cs_option(handle_, CS_OPT_DETAIL, CS_OPT_ON);
+    cs_option(disasm.handle_, CS_OPT_DETAIL, CS_OPT_ON);
+    return Result<Disassembler>::Ok(std::move(disasm));
 }
 
 Disassembler::~Disassembler() {
