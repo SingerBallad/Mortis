@@ -14,8 +14,8 @@ TEST(Process, Singleton) {
 }
 
 TEST(Process, FindMainModule) {
-    auto& process = Process::Self();
-    auto mainModule = process.FindModule();
+    auto& process    = Process::Self();
+    auto  mainModule = process.FindModule();
     ASSERT_TRUE(mainModule.has_value());
     EXPECT_FALSE(mainModule->name().empty());
     EXPECT_NE(mainModule->base(), 0u);
@@ -24,27 +24,30 @@ TEST(Process, FindMainModule) {
 
 TEST(Process, FindModuleNonexistent) {
     auto& process = Process::Self();
-    auto mod = process.FindModule("this_module_does_not_exist_12345.dll");
+    auto  mod     = process.FindModule("this_module_does_not_exist_12345.dll");
     EXPECT_FALSE(mod.has_value());
 }
 
 TEST(Process, EnumerateModules) {
     auto& process = Process::Self();
-    auto modules = process.EnumerateModules();
+    auto  modules = process.EnumerateModules();
     EXPECT_GT(modules.size(), 0u);
 
     // At least one module should contain the Add function
     auto addAddr = AddressOf(&Add);
-    bool found = false;
+    bool found   = false;
     for (auto& mod : modules) {
-        if (mod.contains(addAddr)) { found = true; break; }
+        if (mod.contains(addAddr)) {
+            found = true;
+            break;
+        }
     }
     EXPECT_TRUE(found);
 }
 
 TEST(Process, ModuleContainsAddress) {
-    auto& process = Process::Self();
-    auto mainModule = process.FindModule();
+    auto& process    = Process::Self();
+    auto  mainModule = process.FindModule();
     ASSERT_TRUE(mainModule.has_value());
     auto addAddr = AddressOf(&Add);
     EXPECT_TRUE(mainModule->contains(addAddr));
@@ -52,38 +55,37 @@ TEST(Process, ModuleContainsAddress) {
 }
 
 TEST(Process, ReadMemory) {
-    int value = 0xBEEF;
-    int dest = 0;
+    int  value  = 0xBEEF;
+    int  dest   = 0;
     auto result = Process::ReadMemory(&dest, reinterpret_cast<Address>(&value), sizeof(int));
     ASSERT_TRUE(result) << result.error();
     EXPECT_EQ(dest, 0xBEEF);
 }
 
 TEST(Process, WriteMemory) {
-    int value = 42;
-    int source = 99;
-    auto result = Process::WriteMemory(
-        reinterpret_cast<Address>(&value), &source, sizeof(int));
+    int  value  = 42;
+    int  source = 99;
+    auto result = Process::WriteMemory(reinterpret_cast<Address>(&value), &source, sizeof(int));
     ASSERT_TRUE(result) << result.error();
     EXPECT_EQ(value, 99);
 }
 
 TEST(Process, ReadTyped) {
-    int value = 12345;
+    int  value  = 12345;
     auto result = Process::Read<int>(reinterpret_cast<Address>(&value));
     ASSERT_TRUE(result) << result.error();
     EXPECT_EQ(result.value(), 12345);
 }
 
 TEST(Process, WriteTyped) {
-    int value = 0;
+    int  value  = 0;
     auto result = Process::Write<int>(reinterpret_cast<Address>(&value), 67890);
     ASSERT_TRUE(result) << result.error();
     EXPECT_EQ(value, 67890);
 }
 
 TEST(Process, SetAndQueryProtection) {
-    auto addAddr = AddressOf(&Add);
+    auto addAddr  = AddressOf(&Add);
     auto origProt = Process::QueryProtection(addAddr);
     ASSERT_TRUE(origProt) << origProt.error();
 
@@ -118,15 +120,15 @@ TEST(Module, ConstructorAndAccessors) {
 
 TEST(Module, ContainsBoundary) {
     Module mod("test.dll", 0x1000, 0x2000);
-    EXPECT_TRUE(mod.contains(0x1000));   // base (inclusive)
-    EXPECT_TRUE(mod.contains(0x2FFF));   // base + size - 1
-    EXPECT_FALSE(mod.contains(0x3000));  // base + size (exclusive)
-    EXPECT_FALSE(mod.contains(0x0FFF));  // below base
+    EXPECT_TRUE(mod.contains(0x1000));  // base (inclusive)
+    EXPECT_TRUE(mod.contains(0x2FFF));  // base + size - 1
+    EXPECT_FALSE(mod.contains(0x3000)); // base + size (exclusive)
+    EXPECT_FALSE(mod.contains(0x0FFF)); // below base
 }
 
 TEST(Module, FindTextSection) {
-    auto& process = Process::Self();
-    auto mainModule = process.FindModule();
+    auto& process    = Process::Self();
+    auto  mainModule = process.FindModule();
     ASSERT_TRUE(mainModule.has_value());
 
     auto textSection = mainModule->findSection(".text");
@@ -137,8 +139,8 @@ TEST(Module, FindTextSection) {
 }
 
 TEST(Module, FindSectionNonexistent) {
-    auto& process = Process::Self();
-    auto mainModule = process.FindModule();
+    auto& process    = Process::Self();
+    auto  mainModule = process.FindModule();
     ASSERT_TRUE(mainModule.has_value());
 
     auto noSection = mainModule->findSection(".doesnotexist");

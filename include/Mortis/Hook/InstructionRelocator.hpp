@@ -17,8 +17,7 @@ struct RelocationResult {
 };
 
 /// @brief Relocate prologue instructions to a trampoline address.
-[[nodiscard]] auto
-RelocateInstructions(const PrologueInfo& prologue, std::uint64_t trampolineBase)
+[[nodiscard]] auto RelocateInstructions(const PrologueInfo& prologue, std::uint64_t trampolineBase)
     -> Result<RelocationResult>;
 
 #ifdef MORTIS_ARCH_X64

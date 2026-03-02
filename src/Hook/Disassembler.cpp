@@ -13,7 +13,7 @@ Disassembler::Disassembler() {
 #ifdef MORTIS_ARCH_X64
     err = cs_open(CS_ARCH_X86, CS_MODE_64, &handle_);
 #elif defined(MORTIS_ARCH_ARM64)
-    err = cs_open(CS_ARCH_ARM64, CS_MODE_ARM, &handle_);
+    err = cs_open(CS_ARCH_AARCH64, CS_MODE_ARM, &handle_);
 #endif
     if (err != CS_ERR_OK) return;
     cs_option(handle_, CS_OPT_DETAIL, CS_OPT_ON);

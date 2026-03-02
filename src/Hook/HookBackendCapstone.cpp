@@ -121,12 +121,12 @@ static auto SkipJumpStubsSafe(void* code) -> void* {
 
         // B imm26 — unconditional branch (linker veneer)
         if ((w0 & ARM64::kB_BL_Mask) == ARM64::kB_BL_Pattern && !(w0 & ARM64::kBL_Bit)) {
-           const  auto imm26  = w0 & ARM64::kImm26Mask;
-            auto offset = static_cast<std::int64_t>(imm26);
+            const auto imm26  = w0 & ARM64::kImm26Mask;
+            auto       offset = static_cast<std::int64_t>(imm26);
             if (offset & (1LL << 25)) offset |= ~((1LL << 26) - 1);
-            offset  *= 4;
-            auto pc  = reinterpret_cast<std::uint64_t>(pb);
-            auto* dest = reinterpret_cast<std::uint8_t*>(pc + static_cast<std::uint64_t>(offset));
+            offset     *= 4;
+            auto  pc    = reinterpret_cast<std::uint64_t>(pb);
+            auto* dest  = reinterpret_cast<std::uint8_t*>(pc + static_cast<std::uint64_t>(offset));
             if (HookRegistry::Instance().findContainingTrampoline(dest)) {
                 break;
             }
@@ -155,16 +155,16 @@ static auto SkipJumpStubsSafe(void* code) -> void* {
             std::array<std::uint32_t, 3> w{};
             std::memcpy(w.data(), pb, 12);
             if (const auto rd = w[0] & 0x1Fu; (w[1] & 0xFFC003E0) == (0x91000000 | (rd << 5)) && (w[1] & 0x1Fu) == rd
-                && w[2] == (0xD61F0000u | (rd << 5))) {
-               const  auto pc    = reinterpret_cast<std::uint64_t>(pb);
-               const  auto immlo = (w[0] >> 29) & 0x3u;
-               const  auto immhi = (w[0] >> 5) & 0x7FFFFu;
-                auto imm21 = static_cast<std::int64_t>((immhi << 2) | immlo);
+                                              && w[2] == (0xD61F0000u | (rd << 5))) {
+                const auto pc    = reinterpret_cast<std::uint64_t>(pb);
+                const auto immlo = (w[0] >> 29) & 0x3u;
+                const auto immhi = (w[0] >> 5) & 0x7FFFFu;
+                auto       imm21 = static_cast<std::int64_t>((immhi << 2) | immlo);
                 if (imm21 & (1LL << 20)) imm21 |= ~((1LL << 21) - 1);
-               const  auto adrpTarget  = (pc & ~0xFFFULL) + static_cast<std::uint64_t>(imm21 << 12);
-               const  auto imm12       = (w[1] >> 10) & 0xFFFu;
-               const  auto finalTarget = adrpTarget + imm12;
-                pb               = reinterpret_cast<std::uint8_t*>(finalTarget);
+                const auto adrpTarget  = (pc & ~0xFFFULL) + static_cast<std::uint64_t>(imm21 << 12);
+                const auto imm12       = (w[1] >> 10) & 0xFFFu;
+                const auto finalTarget = adrpTarget + imm12;
+                pb                     = reinterpret_cast<std::uint8_t*>(finalTarget);
                 continue;
             }
         }
@@ -363,9 +363,8 @@ auto Remove(void*& target, const void* detour) -> Result<void> {
     }
 
     // Find the chain node for this detour.
-    const auto it = std::ranges::find_if(entry->chain, [detour](const ChainNode& n) {
-        return n.detourRawFn == detour;
-    });
+    const auto it =
+        std::ranges::find_if(entry->chain, [detour](const ChainNode& n) { return n.detourRawFn == detour; });
 
     if (it == entry->chain.end()) {
         return Result<void>::Err(ErrorCode::HookRemoveFailed, "Detour not found in hook chain");
@@ -393,7 +392,8 @@ auto Remove(void*& target, const void* detour) -> Result<void> {
         if (!oldProt) {
             return Result<void>::Err(oldProt.error());
         }
-        if (const auto setProt = Process::SetProtectionRaw(patchAddr, patchSize, MemoryProtection::ReadWriteExec); !setProt) {
+        if (const auto setProt = Process::SetProtectionRaw(patchAddr, patchSize, MemoryProtection::ReadWriteExec);
+            !setProt) {
             return Result<void>::Err(setProt.error());
         }
 #endif
@@ -403,7 +403,7 @@ auto Remove(void*& target, const void* detour) -> Result<void> {
             if (!freezerResult) {
                 return Result<void>::Err(freezerResult.code(), freezerResult.error());
             }
-          const   auto& freezer = *freezerResult;
+            const auto& freezer = *freezerResult;
 
             auto* trampolineEntry = static_cast<std::uint8_t*>(target);
             freezer.reverseRemapThreadIPs(trampolineEntry, entry->originalTarget, entry->alignMap);

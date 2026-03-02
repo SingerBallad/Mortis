@@ -105,12 +105,12 @@ void SetIP(ucontext_t* uc, const std::uint64_t ip) {
 ///
 /// @return Remapped IP, or 0 if the IP is not within the source region.
 auto RemapIP(
-    const std::uint64_t         ip,
-    const std::uint64_t         srcBase,
-    const std::size_t           srcSize,
-    const std::uint64_t         dstBase,
-   const  std::span<const AlignEntry> alignMap,
-    const bool                  reverse
+    const std::uint64_t               ip,
+    const std::uint64_t               srcBase,
+    const std::size_t                 srcSize,
+    const std::uint64_t               dstBase,
+    const std::span<const AlignEntry> alignMap,
+    const bool                        reverse
 ) -> std::uint64_t {
     if (ip < srcBase || ip >= srcBase + srcSize) return 0;
 
@@ -149,7 +149,7 @@ auto RemapIP(
 
 auto ThreadFreezer::Create() -> Result<ThreadFreezer> {
     ThreadFreezer freezer;
-    const auto   selfTid = static_cast<pid_t>(syscall(SYS_gettid));
+    const auto    selfTid = static_cast<pid_t>(syscall(SYS_gettid));
 
     // Reset global state (safe — serialised by g_hookMutex).
     g_freezeState.Reset();
@@ -220,7 +220,15 @@ ThreadFreezer::~ThreadFreezer() {
 
     // Release all frozen threads by clearing the futex word.
     g_freezeState.active.store(0, std::memory_order_release);
-    syscall(SYS_futex, &g_freezeState.active, FUTEX_WAKE, std::numeric_limits<std::int32_t>::max(), nullptr, nullptr, 0);
+    syscall(
+        SYS_futex,
+        &g_freezeState.active,
+        FUTEX_WAKE,
+        std::numeric_limits<std::int32_t>::max(),
+        nullptr,
+        nullptr,
+        0
+    );
 
     // Wait for all threads to fully exit the signal handler before
     // returning.  This prevents a subsequent ThreadFreezer from
@@ -237,9 +245,9 @@ ThreadFreezer::~ThreadFreezer() {
 }
 
 void ThreadFreezer::remapThreadIPs(
-    void*                       target,
+    void*                             target,
     const std::size_t                 prologueSize,
-    void*                       trampoline,
+    void*                             trampoline,
     const std::span<const AlignEntry> alignMap
 ) const {
     if (handles_.empty() || alignMap.empty()) return;
@@ -252,7 +260,7 @@ void ThreadFreezer::remapThreadIPs(
         auto* uc = g_freezeState.contexts[i].load(std::memory_order_acquire);
         if (!uc) continue;
 
-        const auto ip       = GetIP(uc);
+        const auto ip = GetIP(uc);
         if (const auto remapped = RemapIP(ip, targetAddr, prologueSize, trampolineAddr, alignMap, false);
             remapped != 0) {
             SetIP(uc, remapped);
@@ -274,7 +282,7 @@ void ThreadFreezer::reverseRemapThreadIPs(void* trampoline, void* target, std::s
         auto* uc = g_freezeState.contexts[i].load(std::memory_order_acquire);
         if (!uc) continue;
 
-        const auto ip       = GetIP(uc);
+        const auto ip = GetIP(uc);
         if (const auto remapped = RemapIP(ip, trampolineAddr, relocatedSize, targetAddr, alignMap, true);
             remapped != 0) {
             SetIP(uc, remapped);

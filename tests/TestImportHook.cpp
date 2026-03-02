@@ -9,9 +9,7 @@ using namespace Mortis;
 // NOINLINE wrapper to force a fresh IAT dereference each call, preventing
 // the optimizer from hoisting the IAT load out of the call-site.
 
-MORTIS_NOINLINE static DWORD CallGetCurrentProcessId() {
-    return GetCurrentProcessId();
-}
+MORTIS_NOINLINE static DWORD CallGetCurrentProcessId() { return GetCurrentProcessId(); }
 
 // ImportHook — Core
 
@@ -20,12 +18,10 @@ TEST(ImportHook, HookKernel32Function) {
     EXPECT_NE(realPid, 0u);
 
     auto hook = ImportHook::Create<DWORD()>(
-        "",                  // main executable
+        "", // main executable
         "kernel32.dll",
         "GetCurrentProcessId",
-        [](auto& original) -> DWORD {
-            return original() + 1;
-        }
+        [](auto& original) -> DWORD { return original() + 1; }
     );
     ASSERT_TRUE(hook) << hook.error();
     EXPECT_TRUE(hook->isEnabled());
@@ -45,10 +41,9 @@ TEST(ImportHook, HookKernel32Function) {
 TEST(ImportHook, ScopeRestore) {
     DWORD realPid = CallGetCurrentProcessId();
     {
-        auto hook = ImportHook::Create<DWORD()>(
-            "", "kernel32.dll", "GetCurrentProcessId",
-            [](auto& original) -> DWORD { return original() + 999; }
-        );
+        auto hook = ImportHook::Create<DWORD()>("", "kernel32.dll", "GetCurrentProcessId", [](auto& original) -> DWORD {
+            return original() + 999;
+        });
         ASSERT_TRUE(hook) << hook.error();
         EXPECT_EQ(CallGetCurrentProcessId(), realPid + 999);
     }
@@ -57,10 +52,9 @@ TEST(ImportHook, ScopeRestore) {
 
 TEST(ImportHook, MoveConstruction) {
     DWORD realPid = CallGetCurrentProcessId();
-    auto hook = ImportHook::Create<DWORD()>(
-        "", "kernel32.dll", "GetCurrentProcessId",
-        [](auto& original) -> DWORD { return original() + 42; }
-    );
+    auto  hook    = ImportHook::Create<DWORD()>("", "kernel32.dll", "GetCurrentProcessId", [](auto& original) -> DWORD {
+        return original() + 42;
+    });
     ASSERT_TRUE(hook) << hook.error();
     EXPECT_EQ(CallGetCurrentProcessId(), realPid + 42);
 
@@ -70,18 +64,16 @@ TEST(ImportHook, MoveConstruction) {
 }
 
 TEST(ImportHook, NonexistentFunction) {
-    auto hook = ImportHook::Create<void()>(
-        "", "kernel32.dll", "ThisFunctionDoesNotExist_XYZ",
-        [](auto& original) { original(); }
-    );
+    auto hook = ImportHook::Create<void()>("", "kernel32.dll", "ThisFunctionDoesNotExist_XYZ", [](auto& original) {
+        original();
+    });
     EXPECT_FALSE(hook);
     EXPECT_EQ(hook.code(), ErrorCode::ImportNotFound);
 }
 
 TEST(ImportHook, NonexistentModule) {
-    auto hook = ImportHook::Create<void()>(
-        "", "nonexistent_module_xyz.dll", "SomeFunction",
-        [](auto& original) { original(); }
-    );
+    auto hook = ImportHook::Create<void()>("", "nonexistent_module_xyz.dll", "SomeFunction", [](auto& original) {
+        original();
+    });
     EXPECT_FALSE(hook);
 }

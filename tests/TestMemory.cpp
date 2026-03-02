@@ -15,14 +15,14 @@ TEST(Pointer, ConstructFromAddress) {
 }
 
 TEST(Pointer, ConstructFromVoidPtr) {
-    int value = 0;
+    int     value = 0;
     Pointer ptr(&value);
     EXPECT_EQ(ptr.getAddress(), reinterpret_cast<Address>(&value));
 }
 
 TEST(Pointer, ReadWriteTyped) {
-    int testValue = 42;
-    auto ptr = Pointer(&testValue);
+    int  testValue = 42;
+    auto ptr       = Pointer(&testValue);
 
     auto readResult = ptr.read<int>();
     ASSERT_TRUE(readResult);
@@ -34,9 +34,9 @@ TEST(Pointer, ReadWriteTyped) {
 }
 
 TEST(Pointer, ReadBytes) {
-    std::uint32_t testValue = 0x04030201;
-    auto ptr = Pointer(&testValue);
-    auto bytesResult = ptr.readBytes(sizeof(testValue));
+    std::uint32_t testValue   = 0x04030201;
+    auto          ptr         = Pointer(&testValue);
+    auto          bytesResult = ptr.readBytes(sizeof(testValue));
     ASSERT_TRUE(bytesResult);
     auto& bytes = bytesResult.value();
     EXPECT_EQ(bytes.size(), sizeof(testValue));
@@ -48,16 +48,16 @@ TEST(Pointer, ReadBytes) {
 
 TEST(Pointer, WriteBytes) {
     std::uint32_t testValue = 0;
-    auto ptr = Pointer(&testValue);
-    auto result = ptr.writeBytes({0xAA, 0xBB, 0xCC, 0xDD});
+    auto          ptr       = Pointer(&testValue);
+    auto          result    = ptr.writeBytes({0xAA, 0xBB, 0xCC, 0xDD});
     ASSERT_TRUE(result) << result.error();
     EXPECT_EQ(testValue, 0xDDCCBBAA);
 }
 
 TEST(Pointer, Deref) {
-    int value = 42;
-    int* pValue = &value;
-    auto ptr = Pointer(&pValue);
+    int  value       = 42;
+    int* pValue      = &value;
+    auto ptr         = Pointer(&pValue);
     auto derefResult = ptr.deref();
     ASSERT_TRUE(derefResult) << derefResult.error();
     EXPECT_EQ(derefResult.value().getAddress(), reinterpret_cast<Address>(&value));
@@ -68,18 +68,18 @@ TEST(Pointer, Deref) {
 }
 
 TEST(Pointer, DerefChain) {
-    int value = 123;
-    int* p = &value;
-    int** pp = &p;
+    int   value = 123;
+    int*  p     = &value;
+    int** pp    = &p;
 
-    auto ptr = Pointer(&pp);
+    auto ptr    = Pointer(&pp);
     auto result = ptr.deref({0, 0});
     ASSERT_TRUE(result) << result.error();
     EXPECT_EQ(result.value().getAddress(), reinterpret_cast<Address>(&value));
 }
 
 TEST(Pointer, AddSub) {
-    auto ptr = Pointer(static_cast<Address>(0x1000));
+    auto ptr   = Pointer(static_cast<Address>(0x1000));
     auto added = ptr.add(0x100);
     EXPECT_EQ(added.getAddress(), 0x1100u);
 
@@ -90,8 +90,8 @@ TEST(Pointer, AddSub) {
 }
 
 TEST(Pointer, IsReadableWritable) {
-    int testValue = 42;
-    auto ptr = Pointer(&testValue);
+    int  testValue = 42;
+    auto ptr       = Pointer(&testValue);
     EXPECT_TRUE(ptr.isReadable());
     EXPECT_TRUE(ptr.isWritable());
 
@@ -114,13 +114,12 @@ TEST(Pointer, OwnerModuleNull) {
 // ScopedProtect
 
 TEST(ScopedProtect, ProtectsAndRestores) {
-    auto addAddr = AddressOf(&Add);
+    auto addAddr  = AddressOf(&Add);
     auto origProt = Process::QueryProtection(addAddr);
     ASSERT_TRUE(origProt);
 
     {
-        auto guard = ScopedProtect::Create(
-            addAddr, 64, MemoryProtection::ReadWriteExec);
+        auto guard = ScopedProtect::Create(addAddr, 64, MemoryProtection::ReadWriteExec);
         ASSERT_TRUE(guard) << guard.error();
 
         auto prot = Process::QueryProtection(addAddr);
@@ -134,13 +133,12 @@ TEST(ScopedProtect, ProtectsAndRestores) {
 }
 
 TEST(ScopedProtect, MoveConstruction) {
-    auto addAddr = AddressOf(&Add);
+    auto addAddr  = AddressOf(&Add);
     auto origProt = Process::QueryProtection(addAddr);
     ASSERT_TRUE(origProt);
 
     {
-        auto guard = ScopedProtect::Create(
-            addAddr, 64, MemoryProtection::ReadWriteExec);
+        auto guard = ScopedProtect::Create(addAddr, 64, MemoryProtection::ReadWriteExec);
         ASSERT_TRUE(guard) << guard.error();
 
         ScopedProtect moved = std::move(guard.value());
@@ -155,19 +153,17 @@ TEST(ScopedProtect, MoveConstruction) {
 }
 
 TEST(ScopedProtect, MoveAssignment) {
-    auto addAddr = AddressOf(&Add);
+    auto addAddr  = AddressOf(&Add);
     auto origProt = Process::QueryProtection(addAddr);
     ASSERT_TRUE(origProt);
 
     {
-        auto guard1 = ScopedProtect::Create(
-            addAddr, 64, MemoryProtection::ReadWriteExec);
+        auto guard1 = ScopedProtect::Create(addAddr, 64, MemoryProtection::ReadWriteExec);
         ASSERT_TRUE(guard1) << guard1.error();
 
         // Create a second guard on a different address, then move-assign.
-        int dummy = 0;
-        auto guard2 = ScopedProtect::Create(
-            reinterpret_cast<Address>(&dummy), 4, MemoryProtection::ReadWrite);
+        int  dummy  = 0;
+        auto guard2 = ScopedProtect::Create(reinterpret_cast<Address>(&dummy), 4, MemoryProtection::ReadWrite);
         ASSERT_TRUE(guard2) << guard2.error();
 
         guard2.value() = std::move(guard1.value());
@@ -185,9 +181,9 @@ TEST(ScopedProtect, MoveAssignment) {
 //  MemoryPatch
 
 TEST(MemoryPatch, PatchAndRestore) {
-    int patchTarget = 0xDEAD;
-    auto patchAddr = reinterpret_cast<Address>(&patchTarget);
-    auto patch = MemoryPatch::Create(patchAddr, {0x42, 0x42, 0x42, 0x42});
+    int  patchTarget = 0xDEAD;
+    auto patchAddr   = reinterpret_cast<Address>(&patchTarget);
+    auto patch       = MemoryPatch::Create(patchAddr, {0x42, 0x42, 0x42, 0x42});
     ASSERT_TRUE(patch) << patch.error();
 
     EXPECT_EQ(patchTarget, 0x42424242);
@@ -202,8 +198,8 @@ TEST(MemoryPatch, PatchAndRestore) {
 }
 
 TEST(MemoryPatch, RaiiAutoRestore) {
-    int patchTarget = 0xCAFE;
-    auto patchAddr = reinterpret_cast<Address>(&patchTarget);
+    int  patchTarget = 0xCAFE;
+    auto patchAddr   = reinterpret_cast<Address>(&patchTarget);
     {
         auto patch = MemoryPatch::Create(patchAddr, {0x11, 0x22, 0x33, 0x44});
         ASSERT_TRUE(patch) << patch.error();
@@ -214,8 +210,8 @@ TEST(MemoryPatch, RaiiAutoRestore) {
 
 TEST(MemoryPatch, CreateNop) {
     std::array<std::uint8_t, 16> buffer{};
-    auto patchAddr = reinterpret_cast<Address>(buffer.data());
-    auto patch = MemoryPatch::CreateNop(patchAddr, 8);
+    auto                         patchAddr = reinterpret_cast<Address>(buffer.data());
+    auto                         patch     = MemoryPatch::CreateNop(patchAddr, 8);
     ASSERT_TRUE(patch) << patch.error();
 
     if constexpr (kIsX64) {
@@ -236,9 +232,9 @@ TEST(MemoryPatch, CreateNop) {
 }
 
 TEST(MemoryPatch, MoveConstruction) {
-    int patchTarget = 0xAAAA;
-    auto patchAddr = reinterpret_cast<Address>(&patchTarget);
-    auto patch = MemoryPatch::Create(patchAddr, {0xBB, 0xBB, 0xBB, 0xBB});
+    int  patchTarget = 0xAAAA;
+    auto patchAddr   = reinterpret_cast<Address>(&patchTarget);
+    auto patch       = MemoryPatch::Create(patchAddr, {0xBB, 0xBB, 0xBB, 0xBB});
     ASSERT_TRUE(patch) << patch.error();
 
     MemoryPatch moved = std::move(patch.value());
@@ -250,12 +246,10 @@ TEST(MemoryPatch, MoveConstruction) {
 }
 
 TEST(MemoryPatch, MoveAssignment) {
-    int target1 = 0x1111;
-    int target2 = 0x2222;
-    auto patch1 = MemoryPatch::Create(
-        reinterpret_cast<Address>(&target1), {0xAA, 0xAA, 0xAA, 0xAA});
-    auto patch2 = MemoryPatch::Create(
-        reinterpret_cast<Address>(&target2), {0xBB, 0xBB, 0xBB, 0xBB});
+    int  target1 = 0x1111;
+    int  target2 = 0x2222;
+    auto patch1  = MemoryPatch::Create(reinterpret_cast<Address>(&target1), {0xAA, 0xAA, 0xAA, 0xAA});
+    auto patch2  = MemoryPatch::Create(reinterpret_cast<Address>(&target2), {0xBB, 0xBB, 0xBB, 0xBB});
     ASSERT_TRUE(patch1) << patch1.error();
     ASSERT_TRUE(patch2) << patch2.error();
 
@@ -265,7 +259,7 @@ TEST(MemoryPatch, MoveAssignment) {
     // Move-assign patch1 into patch2 — patch2 should restore target2, then own target1.
     patch2.value() = std::move(patch1.value());
 
-    EXPECT_EQ(target2, 0x2222); // target2 restored by old patch2
+    EXPECT_EQ(target2, 0x2222);                       // target2 restored by old patch2
     EXPECT_EQ(target1, static_cast<int>(0xAAAAAAAA)); // target1 still patched via moved patch
 
     ASSERT_TRUE(patch2->restore());
@@ -273,9 +267,9 @@ TEST(MemoryPatch, MoveAssignment) {
 }
 
 TEST(MemoryPatch, DoubleApplyRestoreIdempotent) {
-    int patchTarget = 0x1234;
-    auto patchAddr = reinterpret_cast<Address>(&patchTarget);
-    auto patch = MemoryPatch::Create(patchAddr, {0x56, 0x78, 0x9A, 0xBC});
+    int  patchTarget = 0x1234;
+    auto patchAddr   = reinterpret_cast<Address>(&patchTarget);
+    auto patch       = MemoryPatch::Create(patchAddr, {0x56, 0x78, 0x9A, 0xBC});
     ASSERT_TRUE(patch) << patch.error();
 
     ASSERT_TRUE(patch->apply());

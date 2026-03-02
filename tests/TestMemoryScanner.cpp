@@ -84,9 +84,7 @@ TEST(MemoryScanner, ParseSignatureValid) {
     EXPECT_EQ(sig->size(), 4u);
 }
 
-TEST(MemoryScanner, ParseSignatureEmpty) {
-    EXPECT_FALSE(MemoryScanner::ParseSignature("").has_value());
-}
+TEST(MemoryScanner, ParseSignatureEmpty) { EXPECT_FALSE(MemoryScanner::ParseSignature("").has_value()); }
 
 TEST(MemoryScanner, ParseSignatureWildcardVariants) {
     auto s1 = MemoryScanner::ParseSignature("AA ? BB");
@@ -107,8 +105,7 @@ TEST(MemoryScanner, FindFirstStringPattern) {
 }
 
 TEST(MemoryScanner, FindFirstStringPatternNoMatch) {
-    auto result = MemoryScanner::FindFirst(
-        "", "FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE");
+    auto result = MemoryScanner::FindFirst("", "FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE");
     EXPECT_FALSE(result.hasResult());
 }
 
@@ -122,8 +119,7 @@ TEST(MemoryScanner, FindAllStringPattern) {
 }
 
 TEST(MemoryScanner, FindAllStringPatternNoMatch) {
-    auto results = MemoryScanner::FindAll(
-        "", "FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE");
+    auto results = MemoryScanner::FindAll("", "FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE FE");
     EXPECT_TRUE(results.empty());
 }
 
@@ -135,8 +131,7 @@ TEST(MemoryScanner, FindFirstStringWildcard) {
 }
 
 TEST(MemoryScanner, FindFirstNonexistentModule) {
-    auto result = MemoryScanner::FindFirst(
-        "this_module_does_not_exist_12345.so", "13 37 C0 DE");
+    auto result = MemoryScanner::FindFirst("this_module_does_not_exist_12345.so", "13 37 C0 DE");
     EXPECT_FALSE(result.hasResult());
 }
 
@@ -197,7 +192,7 @@ TEST(ScanResult, DefaultIsEmpty) {
 
 TEST(ScanResult, ConstructFromPointer) {
     const std::byte b{0x42};
-    ScanResult r{&b};
+    ScanResult      r{&b};
     EXPECT_TRUE(r.hasResult());
     EXPECT_EQ(r.getRaw(), &b);
     EXPECT_EQ(r.get(), reinterpret_cast<Address>(&b));
@@ -205,7 +200,7 @@ TEST(ScanResult, ConstructFromPointer) {
 
 TEST(ScanResult, ReadInteger) {
     alignas(8) const std::uint8_t data[] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
-    ScanResult r{reinterpret_cast<const std::byte*>(data)};
+    ScanResult                    r{reinterpret_cast<const std::byte*>(data)};
     EXPECT_EQ(r.read<std::uint8_t>(0), 0x01u);
     EXPECT_EQ(r.read<std::uint8_t>(3), 0x04u);
     EXPECT_EQ(r.read<std::uint16_t>(0), 0x0201u);
@@ -214,33 +209,41 @@ TEST(ScanResult, ReadInteger) {
 
 TEST(ScanResult, Rel) {
     alignas(8) const std::uint8_t data[] = {
-        0xAA, 0xBB,
-        0x10, 0x00, 0x00, 0x00,  // rel32 = +16
+        0xAA,
+        0xBB,
+        0x10,
+        0x00,
+        0x00,
+        0x00, // rel32 = +16
         0xCC
     };
     ScanResult r{reinterpret_cast<const std::byte*>(data)};
-    auto resolved = r.rel(2);
-    auto expected = reinterpret_cast<Address>(data + 6) + 16;
+    auto       resolved = r.rel(2);
+    auto       expected = reinterpret_cast<Address>(data + 6) + 16;
     EXPECT_EQ(resolved, expected);
 }
 
 TEST(ScanResult, RelWithRemaining) {
     alignas(8) const std::uint8_t data[] = {
-        0xAA, 0xBB,
-        0x10, 0x00, 0x00, 0x00,
-        0xFF,  // extra operand byte
+        0xAA,
+        0xBB,
+        0x10,
+        0x00,
+        0x00,
+        0x00,
+        0xFF, // extra operand byte
         0xCC
     };
     ScanResult r{reinterpret_cast<const std::byte*>(data)};
-    auto resolved = r.rel(2, 1);
-    auto expected = reinterpret_cast<Address>(data + 7) + 16;
+    auto       resolved = r.rel(2, 1);
+    auto       expected = reinterpret_cast<Address>(data + 7) + 16;
     EXPECT_EQ(resolved, expected);
 }
 
 TEST(ScanResult, ToPointer) {
     const std::byte dummy{0x42};
-    ScanResult r{&dummy};
-    auto ptr = r.toPointer();
+    ScanResult      r{&dummy};
+    auto            ptr = r.toPointer();
     EXPECT_EQ(ptr.getAddress(), reinterpret_cast<Address>(&dummy));
 }
 
@@ -249,7 +252,7 @@ TEST(ScanResult, ToPointer) {
 TEST(MemoryScanner, FindFirstWithOptions) {
     (void)kScanNeedle[0];
     ScanOptions opts{ScanAlignment::X1, ScanHint::None};
-    auto result = MemoryScanner::FindFirst("", "13 37 C0 DE 42 99 AA 55", opts);
+    auto        result = MemoryScanner::FindFirst("", "13 37 C0 DE 42 99 AA 55", opts);
     ASSERT_TRUE(result.hasResult());
 }
 
@@ -283,10 +286,22 @@ TEST(MemoryScanner, FindInSectionWithModule) {
 
 TEST(MemoryScanner, ScanBufferMatch) {
     const std::array buf = {
-        std::byte{0xAA}, std::byte{0xBB}, std::byte{0xCC}, std::byte{0xDD},
-        std::byte{0x11}, std::byte{0x22}, std::byte{0x33}, std::byte{0x44},
-        std::byte{0x55}, std::byte{0x66}, std::byte{0x77}, std::byte{0x88},
-        std::byte{0x99}, std::byte{0x00}, std::byte{0xFF}, std::byte{0xEE},
+        std::byte{0xAA},
+        std::byte{0xBB},
+        std::byte{0xCC},
+        std::byte{0xDD},
+        std::byte{0x11},
+        std::byte{0x22},
+        std::byte{0x33},
+        std::byte{0x44},
+        std::byte{0x55},
+        std::byte{0x66},
+        std::byte{0x77},
+        std::byte{0x88},
+        std::byte{0x99},
+        std::byte{0x00},
+        std::byte{0xFF},
+        std::byte{0xEE},
     };
     auto sig = MemoryScanner::ParseSignature("11 22 33 44");
     ASSERT_TRUE(sig.has_value());
@@ -297,16 +312,25 @@ TEST(MemoryScanner, ScanBufferMatch) {
 
 TEST(MemoryScanner, ScanBufferNoMatch) {
     const std::array<std::byte, 8> buf{};
-    auto sig = MemoryScanner::ParseSignature("FF FF FF FF");
+    auto                           sig = MemoryScanner::ParseSignature("FF FF FF FF");
     ASSERT_TRUE(sig.has_value());
     EXPECT_FALSE(MemoryScanner::ScanBuffer(buf, *sig).hasResult());
 }
 
 TEST(MemoryScanner, ScanBufferAllMultiple) {
     const std::array buf = {
-        std::byte{0xAA}, std::byte{0xBB}, std::byte{0x00}, std::byte{0x00},
-        std::byte{0xAA}, std::byte{0xBB}, std::byte{0x00}, std::byte{0x00},
-        std::byte{0xAA}, std::byte{0xBB}, std::byte{0x00}, std::byte{0x00},
+        std::byte{0xAA},
+        std::byte{0xBB},
+        std::byte{0x00},
+        std::byte{0x00},
+        std::byte{0xAA},
+        std::byte{0xBB},
+        std::byte{0x00},
+        std::byte{0x00},
+        std::byte{0xAA},
+        std::byte{0xBB},
+        std::byte{0x00},
+        std::byte{0x00},
     };
     auto sig = MemoryScanner::ParseSignature("AA BB");
     ASSERT_TRUE(sig.has_value());
@@ -316,8 +340,14 @@ TEST(MemoryScanner, ScanBufferAllMultiple) {
 
 TEST(MemoryScanner, ScanBufferWildcard) {
     const std::array buf = {
-        std::byte{0x10}, std::byte{0x20}, std::byte{0xFF}, std::byte{0x30},
-        std::byte{0x40}, std::byte{0x50}, std::byte{0x60}, std::byte{0x70},
+        std::byte{0x10},
+        std::byte{0x20},
+        std::byte{0xFF},
+        std::byte{0x30},
+        std::byte{0x40},
+        std::byte{0x50},
+        std::byte{0x60},
+        std::byte{0x70},
     };
     auto sig = MemoryScanner::ParseSignature("10 ? FF 30");
     ASSERT_TRUE(sig.has_value());

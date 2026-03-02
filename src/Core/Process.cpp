@@ -78,10 +78,12 @@ auto MemoryPatch::Create(const Address address, std::vector<std::uint8_t> newByt
     patch.oldBytes_.resize(patch.newBytes_.size());
 
     if (const auto readResult = Process::ReadMemory(patch.oldBytes_.data(), address, patch.oldBytes_.size());
-        !readResult) return Result<MemoryPatch>::Err(readResult.error());
+        !readResult)
+        return Result<MemoryPatch>::Err(readResult.error());
 
     if (const auto writeResult = Process::WriteMemory(address, patch.newBytes_.data(), patch.newBytes_.size());
-        !writeResult) return Result<MemoryPatch>::Err(writeResult.error());
+        !writeResult)
+        return Result<MemoryPatch>::Err(writeResult.error());
 
     patch.applied_ = true;
     return Result<MemoryPatch>::Ok(std::move(patch));

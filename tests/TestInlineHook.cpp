@@ -8,9 +8,7 @@ using namespace Mortis;
 // Plain function-pointer detour helpers (used by FunctionPointerDetour tests).
 namespace {
 
-int DetourSubtract(OriginalFunction<int(int, int)>& original, int a, int b) {
-    return original(a, b) + 1000;
-}
+int DetourSubtract(OriginalFunction<int(int, int)>& original, int a, int b) { return original(a, b) + 1000; }
 
 } // namespace
 
@@ -20,12 +18,8 @@ TEST(InlineHook, FreeFunctionByAddress) {
     EXPECT_EQ(IndirectCall(Add, 3, 4), 7);
 
     // Signature auto-deduced from the detour lambda.
-    auto hook = InlineHook::Create(
-        AddressOf(&Add),
-        [](auto& original, int a, int b) -> int {
-            return original(a, b) * 10;
-        }
-    );
+    auto hook =
+        InlineHook::Create(AddressOf(&Add), [](auto& original, int a, int b) -> int { return original(a, b) * 10; });
     ASSERT_TRUE(hook) << hook.error();
     EXPECT_EQ(IndirectCall(Add, 3, 4), 70);
 
@@ -38,12 +32,9 @@ TEST(InlineHook, FreeFunctionByAddress) {
 
 TEST(InlineHook, FreeFunctionScopeRestore) {
     {
-        auto hook = InlineHook::Create(
-            AddressOf(&Add),
-            [](auto& original, int a, int b) -> int {
-                return original(a, b) + 100;
-            }
-        );
+        auto hook = InlineHook::Create(AddressOf(&Add), [](auto& original, int a, int b) -> int {
+            return original(a, b) + 100;
+        });
         ASSERT_TRUE(hook) << hook.error();
         EXPECT_EQ(IndirectCall(Add, 3, 4), 107);
     }
@@ -51,47 +42,40 @@ TEST(InlineHook, FreeFunctionScopeRestore) {
 }
 
 TEST(InlineHook, TypedFunctionPointer) {
-    auto hook = InlineHook::Create(
-        &Multiply,
-        [](auto& original, int a, int b) -> int {
-            return original(a, b) + 1000;
-        }
-    );
+    auto hook =
+        InlineHook::Create(&Multiply, [](auto& original, int a, int b) -> int { return original(a, b) + 1000; });
     ASSERT_TRUE(hook) << hook.error();
     EXPECT_EQ(IndirectCall(Multiply, 5, 6), 1030);
 }
 
 TEST(InlineHook, MemberFunction) {
     Calculator calc;
-    int (Calculator::*volatile computePtr)(int, int) = &Calculator::Compute;
-    auto callCompute = [&](int x, int y) { return (calc.*computePtr)(x, y); };
+    int (Calculator::* volatile computePtr)(int, int) = &Calculator::Compute;
+    auto callCompute                                  = [&](int x, int y) { return (calc.*computePtr)(x, y); };
 
-    EXPECT_EQ(callCompute(3, 4), 10);  // 3*2 + 4
+    EXPECT_EQ(callCompute(3, 4), 10); // 3*2 + 4
 
-    auto hook = InlineHook::CreateMember<&Calculator::Compute>(
-        [](auto& original, Calculator* self, int x, int y) -> int {
+    auto hook =
+        InlineHook::CreateMember<&Calculator::Compute>([](auto& original, Calculator* self, int x, int y) -> int {
             return original(self, x, y) + 100;
-        }
-    );
+        });
     ASSERT_TRUE(hook) << hook.error();
     EXPECT_EQ(callCompute(3, 4), 110);
 }
 
 TEST(InlineHook, MemberFunctionByAddress) {
     Calculator calc;
-    int (Calculator::*volatile computePtr)(int, int) = &Calculator::Compute;
-    auto callCompute = [&](int x, int y) { return (calc.*computePtr)(x, y); };
+    int (Calculator::* volatile computePtr)(int, int) = &Calculator::Compute;
+    auto callCompute                                  = [&](int x, int y) { return (calc.*computePtr)(x, y); };
 
     EXPECT_EQ(callCompute(3, 4), 10);
 
     // Use CreateMember with an explicit address.
     auto addr = Detail::MemberFnAddress(&Calculator::Compute);
-    auto hook = InlineHook::CreateMember<&Calculator::Compute>(
-        addr,
-        [](auto& original, Calculator* self, int x, int y) -> int {
+    auto hook =
+        InlineHook::CreateMember<&Calculator::Compute>(addr, [](auto& original, Calculator* self, int x, int y) -> int {
             return original(self, x, y) + 200;
-        }
-    );
+        });
     ASSERT_TRUE(hook) << hook.error();
     EXPECT_EQ(callCompute(3, 4), 210);
 }
@@ -99,8 +83,8 @@ TEST(InlineHook, MemberFunctionByAddress) {
 TEST(InlineHook, MemberFunctionPointerDetour) {
     // Hook a member function with a plain function pointer detour.
     Calculator calc;
-    int (Calculator::*volatile computePtr)(int, int) = &Calculator::Compute;
-    auto callCompute = [&](int x, int y) { return (calc.*computePtr)(x, y); };
+    int (Calculator::* volatile computePtr)(int, int) = &Calculator::Compute;
+    auto callCompute                                  = [&](int x, int y) { return (calc.*computePtr)(x, y); };
 
     EXPECT_EQ(callCompute(3, 4), 10);
 
@@ -114,12 +98,9 @@ TEST(InlineHook, MemberFunctionPointerDetour) {
 }
 
 TEST(InlineHook, IsEnabled) {
-    auto hook = InlineHook::Create(
-        AddressOf(&Subtract),
-        [](auto& original, int a, int b) -> int {
-            return original(a, b) * 2;
-        }
-    );
+    auto hook = InlineHook::Create(AddressOf(&Subtract), [](auto& original, int a, int b) -> int {
+        return original(a, b) * 2;
+    });
     ASSERT_TRUE(hook) << hook.error();
     EXPECT_TRUE(hook->isEnabled());
 
@@ -133,12 +114,9 @@ TEST(InlineHook, IsEnabled) {
 //                   InlineHook — Move semantics
 
 TEST(InlineHook, MoveConstruction) {
-    auto hook = InlineHook::Create(
-        AddressOf(&Subtract),
-        [](auto& original, int a, int b) -> int {
-            return original(a, b) + 500;
-        }
-    );
+    auto hook = InlineHook::Create(AddressOf(&Subtract), [](auto& original, int a, int b) -> int {
+        return original(a, b) + 500;
+    });
     ASSERT_TRUE(hook) << hook.error();
     EXPECT_EQ(IndirectCall(Subtract, 10, 3), 507);
 
@@ -148,12 +126,9 @@ TEST(InlineHook, MoveConstruction) {
 }
 
 TEST(InlineHook, MoveAssignment) {
-    auto hook1 = InlineHook::Create(
-        AddressOf(&Subtract),
-        [](auto& original, int a, int b) -> int {
-            return original(a, b) + 200;
-        }
-    );
+    auto hook1 = InlineHook::Create(AddressOf(&Subtract), [](auto& original, int a, int b) -> int {
+        return original(a, b) + 200;
+    });
     ASSERT_TRUE(hook1) << hook1.error();
 
     InlineHookHandle<int(int, int)> hook2 = std::move(hook1.value());
@@ -164,12 +139,8 @@ TEST(InlineHook, MoveAssignment) {
 //                   InlineHook — Advanced scenarios
 
 TEST(InlineHook, DisableEnableMultipleCycles) {
-    auto hook = InlineHook::Create(
-        AddressOf(&Add),
-        [](auto& original, int a, int b) -> int {
-            return original(a, b) + 1;
-        }
-    );
+    auto hook =
+        InlineHook::Create(AddressOf(&Add), [](auto& original, int a, int b) -> int { return original(a, b) + 1; });
     ASSERT_TRUE(hook) << hook.error();
 
     for (int i = 0; i < 5; ++i) {
@@ -182,44 +153,28 @@ TEST(InlineHook, DisableEnableMultipleCycles) {
 }
 
 TEST(InlineHook, ConcurrentHooksDifferentFunctions) {
-    auto hookAdd = InlineHook::Create(
-        &Add,
-        [](auto& original, int a, int b) -> int {
-            return original(a, b) + 100;
-        }
-    );
-    auto hookMul = InlineHook::Create(
-        &Multiply,
-        [](auto& original, int a, int b) -> int {
-            return original(a, b) + 200;
-        }
-    );
-    auto hookSub = InlineHook::Create(
-        &Subtract,
-        [](auto& original, int a, int b) -> int {
-            return original(a, b) + 300;
-        }
-    );
+    auto hookAdd = InlineHook::Create(&Add, [](auto& original, int a, int b) -> int { return original(a, b) + 100; });
+    auto hookMul =
+        InlineHook::Create(&Multiply, [](auto& original, int a, int b) -> int { return original(a, b) + 200; });
+    auto hookSub =
+        InlineHook::Create(&Subtract, [](auto& original, int a, int b) -> int { return original(a, b) + 300; });
     ASSERT_TRUE(hookAdd) << hookAdd.error();
     ASSERT_TRUE(hookMul) << hookMul.error();
     ASSERT_TRUE(hookSub) << hookSub.error();
 
     EXPECT_EQ(IndirectCall(Add, 2, 3), 105);       // 5 + 100
-    EXPECT_EQ(IndirectCall(Multiply, 2, 3), 206);   // 6 + 200
-    EXPECT_EQ(IndirectCall(Subtract, 10, 3), 307);  // 7 + 300
+    EXPECT_EQ(IndirectCall(Multiply, 2, 3), 206);  // 6 + 200
+    EXPECT_EQ(IndirectCall(Subtract, 10, 3), 307); // 7 + 300
 }
 
 TEST(InlineHook, HookVoidFunction) {
     // Verify that hooking a void(int) function works.
     volatile int sideEffect = 0;
 
-    auto hook = InlineHook::Create(
-        AddressOf(&TraceFunction),
-        [&sideEffect](auto& original, int x) -> void {
-            sideEffect = x * 2;
-            original(x);
-        }
-    );
+    auto hook = InlineHook::Create(AddressOf(&TraceFunction), [&sideEffect](auto& original, int x) -> void {
+        sideEffect = x * 2;
+        original(x);
+    });
     ASSERT_TRUE(hook) << hook.error();
 
     TraceFunction(21);
@@ -235,7 +190,7 @@ TEST(InlineHook, FunctionPointerDetour) {
     auto hook = InlineHook::Create(&Subtract, &DetourSubtract);
     ASSERT_TRUE(hook) << hook.error();
 
-    EXPECT_EQ(IndirectCall(Subtract, 10, 3), 1007);  // 7 + 1000
+    EXPECT_EQ(IndirectCall(Subtract, 10, 3), 1007); // 7 + 1000
 
     // Disable / re-enable.
     ASSERT_TRUE(hook->disable());
@@ -257,17 +212,12 @@ TEST(InlineHook, FunctionPointerDetourByAddress) {
 
 TEST(InlineHook, OriginalAccessor) {
     // Original() works with lambda-based hooks too.
-    auto hook = InlineHook::Create(
-        &Add,
-        [](auto& original, int a, int b) -> int {
-            return original(a, b) + 100;
-        }
-    );
+    auto hook = InlineHook::Create(&Add, [](auto& original, int a, int b) -> int { return original(a, b) + 100; });
     ASSERT_TRUE(hook) << hook.error();
 
     // Calling Original() directly should bypass the hook.
     auto* orig = hook->original();
-    EXPECT_EQ(orig(3, 4), 7);              // original Add
+    EXPECT_EQ(orig(3, 4), 7);                // original Add
     EXPECT_EQ(IndirectCall(Add, 3, 4), 107); // through hook
 }
 
@@ -279,4 +229,3 @@ TEST(InlineHook, FunctionPointerTypeMismatchDoesNotCompile) {
     //   auto hook = InlineHook::Create(&Add, &TraceFunction);  // mismatched signatures
     SUCCEED();
 }
-

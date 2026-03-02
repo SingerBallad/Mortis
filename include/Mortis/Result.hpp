@@ -55,9 +55,9 @@ public:
 
     /// @return Reference to the contained value, forwarding value category.
     [[nodiscard]] auto value() & -> T& { return **this; }
-    [[nodiscard]] auto value() const & -> const T& { return **this; }
+    [[nodiscard]] auto value() const& -> const T& { return **this; }
     [[nodiscard]] auto value() && -> T&& { return std::move(**this); }
-    [[nodiscard]] auto value() const && -> const T&& { return std::move(**this); }
+    [[nodiscard]] auto value() const&& -> const T&& { return std::move(**this); }
 
     /// @return The error message. Empty string if result holds a value.
     [[nodiscard]] auto error() const -> const std::string& {
@@ -66,9 +66,7 @@ public:
     }
 
     /// @return The structured error code (ErrorCode::Unknown if success or legacy).
-    [[nodiscard]] auto code() const -> ErrorCode {
-        return this->has_value() ? ErrorCode::Unknown : Base::error().code;
-    }
+    [[nodiscard]] auto code() const -> ErrorCode { return this->has_value() ? ErrorCode::Unknown : Base::error().code; }
 };
 
 /// @brief Specialization of Result for void (success carries no payload).
@@ -100,9 +98,7 @@ public:
     }
 
     /// @return The structured error code.
-    [[nodiscard]] auto code() const -> ErrorCode {
-        return this->has_value() ? ErrorCode::Unknown : Base::error().code;
-    }
+    [[nodiscard]] auto code() const -> ErrorCode { return this->has_value() ? ErrorCode::Unknown : Base::error().code; }
 };
 
 } // namespace Mortis

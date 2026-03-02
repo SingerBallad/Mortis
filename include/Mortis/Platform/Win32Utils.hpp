@@ -62,17 +62,11 @@ inline auto CaseInsensitiveEqual(std::string_view a, std::string_view b) -> bool
     });
 }
 
-inline auto IsCommitted(const MEMORY_BASIC_INFORMATION& mbi) -> bool {
-    return mbi.State == MEM_COMMIT;
-}
+inline auto IsCommitted(const MEMORY_BASIC_INFORMATION& mbi) -> bool { return mbi.State == MEM_COMMIT; }
 
-inline auto IsReadableProtection(const DWORD protect) -> bool {
-    return (protect & (PAGE_GUARD | PAGE_NOACCESS)) == 0;
-}
+inline auto IsReadableProtection(const DWORD protect) -> bool { return (protect & (PAGE_GUARD | PAGE_NOACCESS)) == 0; }
 
-inline auto IsWritableProtection(const DWORD protect) -> bool {
-    return (protect & kWritableProtectionMask) != 0;
-}
+inline auto IsWritableProtection(const DWORD protect) -> bool { return (protect & kWritableProtectionMask) != 0; }
 
 inline auto RegionCoversRange(const MEMORY_BASIC_INFORMATION& mbi, const Address address, std::size_t size) -> bool {
     if (size == 0) size = 1;
@@ -101,20 +95,12 @@ inline auto QueryModulePath(const HMODULE module) -> std::string {
         if (len == 0) return {};
 
         if (len < widePath.size() - 1) {
-            const int utf8Size = WideCharToMultiByte(
-                CP_UTF8,
-                0,
-                widePath.data(),
-                static_cast<int>(len),
-                nullptr,
-                0,
-                nullptr,
-                nullptr
-            );
+            const int utf8Size =
+                WideCharToMultiByte(CP_UTF8, 0, widePath.data(), static_cast<int>(len), nullptr, 0, nullptr, nullptr);
             if (utf8Size <= 0) return {};
 
             std::string utf8Path(static_cast<std::size_t>(utf8Size), '\0');
-            const int written = WideCharToMultiByte(
+            const int   written = WideCharToMultiByte(
                 CP_UTF8,
                 0,
                 widePath.data(),

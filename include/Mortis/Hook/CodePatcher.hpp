@@ -28,6 +28,7 @@ void FlushCode(void* address, std::size_t size);
 /// @param target         The function entry address.
 /// @param savedPrologue  Original bytes that were overwritten.
 /// @return Success or error.
-[[nodiscard]] auto UnpatchEntryAssumeWritable(void* target, std::span<const std::uint8_t> savedPrologue) -> Result<void>;
+[[nodiscard]] auto UnpatchEntryAssumeWritable(void* target, std::span<const std::uint8_t> savedPrologue)
+    -> Result<void>;
 
 } // namespace Mortis::HookEngine

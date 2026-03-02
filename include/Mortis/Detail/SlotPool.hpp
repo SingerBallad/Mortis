@@ -59,9 +59,7 @@ public:
     }
 
     /// @brief Get a writable pointer to the original-function slot.
-    auto originalSlot(int index) -> void** {
-        return reinterpret_cast<void**>(&originals_[index]);
-    }
+    auto originalSlot(int index) -> void** { return reinterpret_cast<void**>(&originals_[index]); }
 
 private:
     SlotPool() = default;

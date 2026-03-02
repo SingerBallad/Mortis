@@ -61,7 +61,9 @@ public:
     [[nodiscard]] auto size() const noexcept -> std::size_t { return size_; }
 
     /// @brief Check if an address falls within this module.
-    [[nodiscard]] auto contains(const Address addr) const noexcept -> bool { return addr >= base_ && addr < base_ + size_; }
+    [[nodiscard]] auto contains(const Address addr) const noexcept -> bool {
+        return addr >= base_ && addr < base_ + size_;
+    }
 
     /// @brief Find a named export symbol.
     /// @param symbolName Export name.
@@ -148,8 +150,7 @@ public:
     /// @param size Region size in bytes.
     /// @param newProtection Desired protection flags.
     /// @return Success or error.
-    static auto SetProtectionRaw(Address address, std::size_t size, MemoryProtection newProtection)
-        -> Result<void>;
+    static auto SetProtectionRaw(Address address, std::size_t size, MemoryProtection newProtection) -> Result<void>;
 
     /// @brief Query the current protection of a memory address.
     static auto QueryProtection(Address address) -> Result<MemoryProtection>;
@@ -277,9 +278,7 @@ public:
     }
 
     /// @brief Create a new Pointer at a negative offset.
-    [[nodiscard]] auto sub(std::ptrdiff_t offset) const noexcept -> Pointer {
-        return add(-offset);
-    }
+    [[nodiscard]] auto sub(std::ptrdiff_t offset) const noexcept -> Pointer { return add(-offset); }
 
     /// @brief Test readability of this address.
     [[nodiscard]] auto isReadable() const -> bool { return Process::IsReadable(address_); }

@@ -44,7 +44,7 @@ auto PatchEntry(void* target, const std::span<const std::uint8_t> jumpBytes) -> 
     const auto addr = reinterpret_cast<Address>(target);
 
     // Change protection to RWX (guard held until function returns).
-  const   auto guard = ScopedProtect::Create(addr, jumpBytes.size(), MemoryProtection::ReadWriteExec);
+    const auto guard = ScopedProtect::Create(addr, jumpBytes.size(), MemoryProtection::ReadWriteExec);
     if (!guard) {
         return Result<void>::Err(ErrorCode::ProtectionFailed, "PatchEntry: cannot set RWX: " + guard.error());
     }

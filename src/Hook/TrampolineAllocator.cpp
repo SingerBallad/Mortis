@@ -106,8 +106,7 @@ auto TrampolineAllocator::allocate(const std::uint64_t nearAddr) -> Result<std::
 
     // 2. Allocate a new region.
     auto regionResult = allocateNewRegion(nearAddr);
-    if (!regionResult)
-        return Result<std::span<std::uint8_t>>::Err(regionResult.code(), regionResult.error());
+    if (!regionResult) return Result<std::span<std::uint8_t>>::Err(regionResult.code(), regionResult.error());
 
     const auto* region = *regionResult;
     (void)region; // used indirectly via AllocateFromExisting
@@ -197,7 +196,7 @@ auto TrampolineAllocator::findFreePageNear(const std::uint64_t center, const std
     // VirtualQuery sliding search
     // range: [lo, hi].
     const auto nearRange = GetNearRange();
-    auto lo = static_cast<std::uint64_t>(
+    auto       lo        = static_cast<std::uint64_t>(
         std::max(static_cast<std::int64_t>(center) - nearRange, static_cast<std::int64_t>(0x10000))
     );
     const auto hi = center + static_cast<std::uint64_t>(nearRange);
@@ -257,7 +256,7 @@ auto TrampolineAllocator::findFreePageNear(const std::uint64_t center, const std
     }
 
 #else
-        const auto nearRange = GetNearRange();
+    const auto nearRange = GetNearRange();
 
     // Linux: scan /proc/self/maps for gaps (Dobby 3-level approach)
 

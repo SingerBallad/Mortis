@@ -38,7 +38,7 @@ inline auto ComputeLoadRange(const dl_phdr_info* info) -> std::optional<std::pai
     for (int i = 0; i < info->dlpi_phnum; ++i) {
         if (info->dlpi_phdr[i].p_type != PT_LOAD) continue;
         const auto segStart = info->dlpi_addr + info->dlpi_phdr[i].p_vaddr;
-       const  auto segEnd   = segStart + info->dlpi_phdr[i].p_memsz;
+        const auto segEnd   = segStart + info->dlpi_phdr[i].p_memsz;
         if (segStart < lo) lo = segStart;
         if (segEnd > hi) hi = segEnd;
     }
@@ -52,9 +52,11 @@ inline auto ParseProcMapLine(const std::string_view line) -> std::optional<ProcM
     if (dashPos == std::string::npos || spacePos == std::string::npos) return std::nullopt;
 
     ProcMapEntry entry{};
-    if (const auto [p1, e1] = std::from_chars(line.data(), line.data() + dashPos, entry.start, 16); e1 != std::errc{}) return std::nullopt;
+    if (const auto [p1, e1] = std::from_chars(line.data(), line.data() + dashPos, entry.start, 16); e1 != std::errc{})
+        return std::nullopt;
     if (const auto [p2, e2] = std::from_chars(line.data() + dashPos + 1, line.data() + spacePos, entry.end, 16);
-        e2 != std::errc{} || entry.end <= entry.start) return std::nullopt;
+        e2 != std::errc{} || entry.end <= entry.start)
+        return std::nullopt;
 
     const auto permsPos = spacePos + 1;
     if (permsPos + 2 >= line.size()) return std::nullopt;

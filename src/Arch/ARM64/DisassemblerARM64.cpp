@@ -7,12 +7,12 @@
 namespace Mortis::HookEngine {
 
 auto Disassembler::IsTerminating(const cs_insn& insn) -> bool {
-    if (insn.id == ARM64_INS_RET) return true;
-    if (insn.id == ARM64_INS_B) {
-        if (const auto& arm64 = insn.detail->arm64; arm64.cc == ARM64_CC_INVALID || arm64.cc == ARM64_CC_AL)
+    if (insn.id == AARCH64_INS_RET) return true;
+    if (insn.id == AARCH64_INS_B) {
+        if (const auto& aarch64 = insn.detail->aarch64; aarch64.cc == AArch64CC_Invalid || aarch64.cc == AArch64CC_AL)
             return true;
     }
-    if (insn.id == ARM64_INS_BR) return true;
+    if (insn.id == AARCH64_INS_BR) return true;
     return false;
 }
 

@@ -198,7 +198,7 @@ consteval auto DeduceDetourSig() {
     } else if constexpr (std::is_pointer_v<D> && std::is_function_v<std::remove_pointer_t<D>>) {
         // Detour function pointer path: R(*)(OriginalFunction<Sig>&, Args...)
         using FnSig  = std::remove_pointer_t<D>;
-        using Traits  = FunctionTraits<FnSig>;
+        using Traits = FunctionTraits<FnSig>;
         if constexpr (Traits::kArity > 0) {
             using FirstArg = std::tuple_element_t<0, typename Traits::ArgsTuple>;
             if constexpr (IsOriginalFunctionRef<FirstArg>) {
@@ -228,9 +228,8 @@ using OriginalFunction = Detail::OriginalFunction<Sig>;
 // AutoDeducibleDetour concept
 /// @brief Satisfied when signature is auto-deducible from a detour callable.
 template <typename Detour>
-concept AutoDeducibleDetour = requires {
-    typename Detail::DetourSignature<Detour>;
-} && FunctionSignature<Detail::DetourSignature<Detour>>;
+concept AutoDeducibleDetour =
+    requires { typename Detail::DetourSignature<Detour>; } && FunctionSignature<Detail::DetourSignature<Detour>>;
 
 // DetourCallable concept
 namespace Detail {

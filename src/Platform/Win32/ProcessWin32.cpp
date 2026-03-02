@@ -34,9 +34,9 @@ auto Process::FindModule(std::string_view moduleName) -> std::optional<Module> {
 }
 
 auto Process::EnumerateModules() -> std::vector<Module> {
-    std::vector<Module> result;
+    std::vector<Module>       result;
     std::array<HMODULE, 1024> mods{};
-    DWORD                      needed = 0;
+    DWORD                     needed = 0;
     if (!EnumProcessModules(GetCurrentProcess(), mods.data(), sizeof(mods), &needed)) return result;
 
     const auto count = std::min<std::size_t>(mods.size(), needed / sizeof(HMODULE));
@@ -64,9 +64,8 @@ auto Process::ReadMemory(void* dest, const Address source, const std::size_t siz
 auto Process::WriteMemory(const Address dest, const void* source, const std::size_t size) -> Result<void> {
     if (size == 0) return Result<void>::Ok();
     const auto mbi      = Win32Detail::QueryRegion(dest);
-    const bool writable =
-        mbi && Win32Detail::IsCommitted(*mbi) && Win32Detail::IsWritableProtection(mbi->Protect)
-        && Win32Detail::RegionCoversRange(*mbi, dest, size);
+    const bool writable = mbi && Win32Detail::IsCommitted(*mbi) && Win32Detail::IsWritableProtection(mbi->Protect)
+                       && Win32Detail::RegionCoversRange(*mbi, dest, size);
 
     if (writable) {
         auto* src = static_cast<const std::uint8_t*>(source);
@@ -87,7 +86,12 @@ auto Process::WriteMemory(const Address dest, const void* source, const std::siz
 auto Process::SetProtection(const Address address, const std::size_t size, const MemoryProtection newProtection)
     -> Result<MemoryProtection> {
     DWORD oldProtect = 0;
-    if (!VirtualProtect(reinterpret_cast<void*>(address), size, Win32Detail::ToNativeProtection(newProtection), &oldProtect))
+    if (!VirtualProtect(
+            reinterpret_cast<void*>(address),
+            size,
+            Win32Detail::ToNativeProtection(newProtection),
+            &oldProtect
+        ))
         return Result<MemoryProtection>::Err(ErrorCode::ProtectionFailed, "VirtualProtect failed");
     return Result<MemoryProtection>::Ok(Win32Detail::FromNativeProtection(oldProtect));
 }
@@ -95,15 +99,19 @@ auto Process::SetProtection(const Address address, const std::size_t size, const
 auto Process::SetProtectionRaw(const Address address, const std::size_t size, const MemoryProtection newProtection)
     -> Result<void> {
     DWORD oldProtect = 0;
-    if (!VirtualProtect(reinterpret_cast<void*>(address), size, Win32Detail::ToNativeProtection(newProtection), &oldProtect))
+    if (!VirtualProtect(
+            reinterpret_cast<void*>(address),
+            size,
+            Win32Detail::ToNativeProtection(newProtection),
+            &oldProtect
+        ))
         return Result<void>::Err(ErrorCode::ProtectionFailed, "VirtualProtect failed");
     return Result<void>::Ok();
 }
 
 auto Process::QueryProtection(const Address address) -> Result<MemoryProtection> {
     const auto mbi = Win32Detail::QueryRegion(address);
-    if (!mbi)
-        return Result<MemoryProtection>::Err(ErrorCode::ProtectionFailed, "VirtualQuery failed");
+    if (!mbi) return Result<MemoryProtection>::Err(ErrorCode::ProtectionFailed, "VirtualQuery failed");
     return Result<MemoryProtection>::Ok(Win32Detail::FromNativeProtection(mbi->Protect));
 }
 
@@ -120,8 +128,8 @@ auto Process::IsWritable(const Address address, const std::size_t size) -> bool 
 }
 
 auto Module::findExport(const std::string_view symbolName) const -> std::optional<Address> {
-    const auto  hMod = reinterpret_cast<HMODULE>(base_);
-    auto* proc = GetProcAddress(hMod, std::string(symbolName).c_str());
+    const auto hMod = reinterpret_cast<HMODULE>(base_);
+    auto*      proc = GetProcAddress(hMod, std::string(symbolName).c_str());
     if (!proc) return std::nullopt;
     return reinterpret_cast<Address>(proc);
 }

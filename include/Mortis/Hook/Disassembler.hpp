@@ -10,10 +10,10 @@ namespace Mortis::HookEngine {
 
 /// @brief A single decoded instruction.
 struct DecodedInsn {
-    std::uint64_t             address = 0; ///< Virtual address.
-    std::vector<std::uint8_t> bytes;       ///< Raw bytes.
-    cs_insn                   detail{};    ///< Capstone instruction detail (value copy only).
-    int ripDispOffset = -1;                ///< (x64) disp32 offset for RIP-relative ops; -1 if none.
+    std::uint64_t             address = 0;        ///< Virtual address.
+    std::vector<std::uint8_t> bytes;              ///< Raw bytes.
+    cs_insn                   detail{};           ///< Capstone instruction detail (value copy only).
+    int                       ripDispOffset = -1; ///< (x64) disp32 offset for RIP-relative ops; -1 if none.
 };
 
 /// @brief Result of prologue analysis.
