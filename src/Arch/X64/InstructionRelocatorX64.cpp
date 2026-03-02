@@ -208,6 +208,14 @@ auto RelocateInstructions(const PrologueInfo& prologue, const std::uint64_t tram
         srcOffset += instrSize;
     }
 
+    if (srcOffset > std::numeric_limits<std::uint8_t>::max()
+        || result.code.size() > std::numeric_limits<std::uint8_t>::max()) {
+        return Result<RelocationResult>::Err(
+            ErrorCode::HookInstallFailed,
+            "Sentinel relocation offset exceeds uint8_t range"
+        );
+    }
+
     AlignEntry sentinel;
     sentinel.targetOffset     = static_cast<std::uint8_t>(srcOffset);
     sentinel.trampolineOffset = static_cast<std::uint8_t>(result.code.size());

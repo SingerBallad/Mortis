@@ -211,6 +211,15 @@ auto ThreadFreezer::Create() -> Result<ThreadFreezer> {
     // Restore old signal handler (all signals already delivered).
     sigaction(kFreezeSignal, &oldSa, nullptr);
 
+    if (g_freezeState.contextCount.load(std::memory_order_acquire) > kMaxFrozenThreads) {
+        return Result<ThreadFreezer>::Err(
+            ErrorCode::HookInstallFailed,
+            "Thread context count (" + std::to_string(g_freezeState.contextCount.load(std::memory_order_relaxed))
+                + ") exceeds kMaxFrozenThreads (" + std::to_string(kMaxFrozenThreads)
+                + "); IP remapping may be incomplete"
+        );
+    }
+
     return Result<ThreadFreezer>::Ok(std::move(freezer));
 }
 

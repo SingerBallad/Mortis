@@ -90,7 +90,9 @@ static auto SkipJumpStubsSafe(void* code) -> void* {
         if (pb[0] == X64::kGroupFF && pb[1] == X64::kJmpIndirect) {
             std::int32_t disp{};
             std::memcpy(&disp, pb + 2, 4);
-            auto* resolved = *reinterpret_cast<void**>(pb + 6 + disp);
+            auto* indirectAddr = reinterpret_cast<void**>(pb + 6 + disp);
+            if (!Process::IsReadable(reinterpret_cast<Address>(indirectAddr), sizeof(void*))) break;
+            auto* resolved = *indirectAddr;
             pb             = static_cast<std::uint8_t*>(resolved);
             continue;
         }
