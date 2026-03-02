@@ -29,8 +29,8 @@ struct FindModuleCtx {
 };
 
 int FindModuleCallback(dl_phdr_info* info, size_t, void* data) {
-    auto*            ctx = static_cast<FindModuleCtx*>(data);
-  const   std::string_view objName(info->dlpi_name);
+    auto*                  ctx = static_cast<FindModuleCtx*>(data);
+    const std::string_view objName(info->dlpi_name);
 
     if (!ctx->targetName.empty()) {
         if (objName.find(ctx->targetName) == std::string_view::npos) return 0;
@@ -77,7 +77,7 @@ auto Process::EnumerateModules() -> std::vector<Module> {
     return ctx.modules;
 }
 
-auto Process::ReadMemory(void* dest,const  Address source,const  std::size_t size) -> Result<void> {
+auto Process::ReadMemory(void* dest, const Address source, const std::size_t size) -> Result<void> {
     if (!IsReadable(source, size))
         return Result<void>::Err(ErrorCode::MemoryNotReadable, "Memory at address is not readable");
     auto* src = reinterpret_cast<const std::uint8_t*>(source);
@@ -85,16 +85,16 @@ auto Process::ReadMemory(void* dest,const  Address source,const  std::size_t siz
     return Result<void>::Ok();
 }
 
-auto Process::WriteMemory(const Address dest, const void* source,const  std::size_t size) -> Result<void> {
+auto Process::WriteMemory(const Address dest, const void* source, const std::size_t size) -> Result<void> {
     if (IsWritable(dest, size)) {
         auto* src = static_cast<const std::uint8_t*>(source);
         std::copy_n(src, size, reinterpret_cast<std::uint8_t*>(dest));
         return Result<void>::Ok();
     }
 
-  const   auto pageSize  = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
-  const   auto aligned   = dest & ~(pageSize - 1);
-    auto totalSize = (dest + size) - aligned;
+    const auto pageSize  = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
+    const auto aligned   = dest & ~(pageSize - 1);
+    auto       totalSize = (dest + size) - aligned;
     if (totalSize < pageSize) totalSize = pageSize;
 
     if (mprotect(reinterpret_cast<void*>(aligned), totalSize, PROT_READ | PROT_WRITE | PROT_EXEC) != 0)
@@ -124,14 +124,14 @@ auto QueryProtectionFromMaps(const Address address) -> std::optional<std::pair<M
 
 } // anonymous namespace
 
-auto Process::SetProtection(const Address address,const  std::size_t size,const  MemoryProtection newProtection)
+auto Process::SetProtection(const Address address, const std::size_t size, const MemoryProtection newProtection)
     -> Result<MemoryProtection> {
     auto oldProt = QueryProtection(address);
     if (!oldProt) return Result<MemoryProtection>::Err(oldProt.error());
 
-   const  auto pageSize  = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
-   const  auto aligned   = address & ~(pageSize - 1);
-    auto totalSize = (address + size) - aligned;
+    const auto pageSize  = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
+    const auto aligned   = address & ~(pageSize - 1);
+    auto       totalSize = (address + size) - aligned;
     if (totalSize < pageSize) totalSize = pageSize;
 
     if (mprotect(reinterpret_cast<void*>(aligned), totalSize, LinuxDetail::ToNativeProtection(newProtection)) != 0)
@@ -142,9 +142,9 @@ auto Process::SetProtection(const Address address,const  std::size_t size,const 
 
 auto Process::SetProtectionRaw(const Address address, const std::size_t size, const MemoryProtection newProtection)
     -> Result<void> {
-  const   auto pageSize  = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
- const    auto aligned   = address & ~(pageSize - 1);
-    auto totalSize = (address + size) - aligned;
+    const auto pageSize  = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
+    const auto aligned   = address & ~(pageSize - 1);
+    auto       totalSize = (address + size) - aligned;
     if (totalSize < pageSize) totalSize = pageSize;
 
     if (mprotect(reinterpret_cast<void*>(aligned), totalSize, LinuxDetail::ToNativeProtection(newProtection)) != 0)
@@ -154,7 +154,7 @@ auto Process::SetProtectionRaw(const Address address, const std::size_t size, co
 }
 
 auto Process::QueryProtection(const Address address) -> Result<MemoryProtection> {
-   const  auto result = QueryProtectionFromMaps(address);
+    const auto result = QueryProtectionFromMaps(address);
     if (!result) return Result<MemoryProtection>::Err(ErrorCode::ProtectionFailed, "Failed to query memory protection");
     return Result<MemoryProtection>::Ok(result->first);
 }
@@ -163,8 +163,8 @@ auto Process::IsReadable(const Address address, std::size_t size) -> bool {
     if (size == 0) size = 1;
     const auto prot = QueryProtectionFromMaps(address);
     if (!prot || !HasFlag(prot->first, MemoryProtection::Read)) return false;
-    auto regionEnd = address + prot->second;
-  const   Address endAddr = address + size;
+    auto          regionEnd = address + prot->second;
+    const Address endAddr   = address + size;
     if (endAddr <= address) return false; // overflow
     while (endAddr > regionEnd) {
         const auto nextProt = QueryProtectionFromMaps(regionEnd);
@@ -176,13 +176,13 @@ auto Process::IsReadable(const Address address, std::size_t size) -> bool {
 
 auto Process::IsWritable(const Address address, std::size_t size) -> bool {
     if (size == 0) size = 1;
-   const  auto prot = QueryProtectionFromMaps(address);
+    const auto prot = QueryProtectionFromMaps(address);
     if (!prot || !HasFlag(prot->first, MemoryProtection::Write)) return false;
-    auto    regionEnd = address + prot->second;
-   const  Address endAddr   = address + size;
+    auto          regionEnd = address + prot->second;
+    const Address endAddr   = address + size;
     if (endAddr <= address) return false;
     while (endAddr > regionEnd) {
-     const    auto nextProt = QueryProtectionFromMaps(regionEnd);
+        const auto nextProt = QueryProtectionFromMaps(regionEnd);
         if (!nextProt || !HasFlag(nextProt->first, MemoryProtection::Write)) return false;
         regionEnd = regionEnd + nextProt->second;
     }
@@ -242,10 +242,10 @@ auto Module::enumerateExports() const -> std::unordered_map<std::string, Address
             break;
         }
         case DT_GNU_HASH: {
-            auto* gnu      = reinterpret_cast<const ElfW(Word)*>(dyn->d_un.d_ptr);
-            gnuNbuckets    = gnu[0];
-            gnuSymndx      = gnu[1];
-         const    auto bloomSize = gnu[2];
+            auto* gnu            = reinterpret_cast<const ElfW(Word)*>(dyn->d_un.d_ptr);
+            gnuNbuckets          = gnu[0];
+            gnuSymndx            = gnu[1];
+            const auto bloomSize = gnu[2];
             // Skip: gnu[3] = bloom shift
             // Bloom filter starts at gnu+4, each element is Addr-sized
             auto* bloom = reinterpret_cast<const ElfW(Addr)*>(&gnu[4]);
@@ -282,7 +282,7 @@ auto Module::enumerateExports() const -> std::unordered_map<std::string, Address
     for (std::size_t i = 0; i < nsyms; ++i) {
         const auto& sym = symtab[i];
         if (sym.st_name == 0 || sym.st_shndx == SHN_UNDEF) continue;
-      const   auto type = ELF64_ST_TYPE(sym.st_info);
+        const auto type = ELF64_ST_TYPE(sym.st_info);
         if (type != STT_FUNC && type != STT_OBJECT && type != STT_GNU_IFUNC) continue;
 
         const char* name = strtab + sym.st_name;
@@ -300,7 +300,7 @@ auto Module::findSection(std::string_view sectionName) const -> std::optional<st
         path = "/proc/self/exe";
     }
 
-  const   int fd = open(path.c_str(), O_RDONLY);
+    const int fd = open(path.c_str(), O_RDONLY);
     if (fd < 0) return std::nullopt;
 
     ElfW(Ehdr) ehdr{};

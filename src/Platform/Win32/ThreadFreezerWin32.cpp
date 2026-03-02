@@ -73,9 +73,7 @@ auto EnumerateFast(std::vector<void*>& handles) -> bool {
             if (DuplicateHandle(hProcess, hThread, hProcess, &hDup, kAccess, FALSE, 0)) {
                 handles.push_back(hDup);
             } else {
-                // Use the original handle directly (won't close in loop).
-                handles.push_back(hThread);
-                hThread = nullptr; // prevent double-close
+                ResumeThread(hThread);
             }
         }
     }

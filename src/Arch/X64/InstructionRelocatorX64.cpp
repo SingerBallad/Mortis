@@ -58,6 +58,15 @@ auto RelocateInstructions(const PrologueInfo& prologue, const std::uint64_t tram
         const auto          instrSize = bytes.size();
         const auto          origPC    = address;
 
+        // Guard against uint8_t overflow in alignment offsets.
+        if (srcOffset > std::numeric_limits<std::uint8_t>::max()
+            || result.code.size() > std::numeric_limits<std::uint8_t>::max()) {
+            return Result<RelocationResult>::Err(
+                ErrorCode::HookInstallFailed,
+                "Relocation offset exceeds uint8_t range at " + std::to_string(address)
+            );
+        }
+
         AlignEntry ae;
         ae.targetOffset     = static_cast<std::uint8_t>(srcOffset);
         ae.trampolineOffset = static_cast<std::uint8_t>(result.code.size());

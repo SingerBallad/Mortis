@@ -4,6 +4,8 @@
 #include <Mortis/Result.hpp>
 
 #include <cstring>
+#include <format>
+#include <stdexcept>
 
 namespace Mortis::HookEngine {
 
@@ -15,7 +17,9 @@ Disassembler::Disassembler() {
 #elif defined(MORTIS_ARCH_ARM64)
     err = cs_open(CS_ARCH_AARCH64, CS_MODE_ARM, &handle_);
 #endif
-    if (err != CS_ERR_OK) return;
+    if (err != CS_ERR_OK) {
+        throw std::runtime_error(std::format("[Mortis] cs_open failed: {}", cs_strerror(err)));
+    }
     cs_option(handle_, CS_OPT_DETAIL, CS_OPT_ON);
 }
 
@@ -60,6 +64,8 @@ auto Disassembler::analyzePrologue(void* target, const std::size_t minBytes, con
             }
         }
 #endif
+
+        decoded.detail.detail = nullptr;
 
         info.totalBytes += insns[i].size;
         info.instructions.push_back(std::move(decoded));

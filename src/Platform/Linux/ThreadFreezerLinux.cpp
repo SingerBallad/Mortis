@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdlib>
 #include <limits>
 #include <vector>
@@ -198,12 +199,12 @@ auto ThreadFreezer::Create() -> Result<ThreadFreezer> {
 
     // Wait for all signaled threads to enter the handler.
     if (sentCount > 0) {
-        constexpr int kMaxSpins = 100'000'000; // ~100ms on modern CPUs
-        for (int spin = 0; spin < kMaxSpins; ++spin) {
-            if (g_freezeState.readyCount.load(std::memory_order_acquire) >= sentCount) {
-                break;
-            }
-            if (spin % 1024 == 0) sched_yield();
+        using Clock             = std::chrono::steady_clock;
+        constexpr auto kTimeout = std::chrono::milliseconds(500);
+        const auto     deadline = Clock::now() + kTimeout;
+        while (g_freezeState.readyCount.load(std::memory_order_acquire) < sentCount) {
+            if (Clock::now() >= deadline) break;
+            sched_yield();
         }
     }
 
@@ -233,12 +234,14 @@ ThreadFreezer::~ThreadFreezer() {
     // Wait for all threads to fully exit the signal handler before
     // returning.  This prevents a subsequent ThreadFreezer from
     // interfering with threads still unwinding from the old handler.
-    constexpr int kMaxSpins = 100'000'000;
-    for (int spin = 0; spin < kMaxSpins; ++spin) {
-        if (g_freezeState.exitCount.load(std::memory_order_acquire) >= sentCount) {
-            break;
+    {
+        using Clock             = std::chrono::steady_clock;
+        constexpr auto kTimeout = std::chrono::milliseconds(500);
+        const auto     deadline = Clock::now() + kTimeout;
+        while (g_freezeState.exitCount.load(std::memory_order_acquire) < sentCount) {
+            if (Clock::now() >= deadline) break;
+            sched_yield();
         }
-        if (spin % 1024 == 0) sched_yield();
     }
 
     g_freezeState.Reset();

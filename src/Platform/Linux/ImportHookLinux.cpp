@@ -60,7 +60,7 @@ auto FindGotEntry(const std::string_view moduleName, const std::string_view symb
             dynRelasz = dyn;
             break;
         default:
-            std::unreachable();
+            break;
         }
     }
 

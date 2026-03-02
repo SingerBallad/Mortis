@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstring>
 #include <mutex>
 #include <span>
@@ -49,7 +50,7 @@ static void RewireChain(HookEngine::HookEntry& entry) {
             nextTarget = trampolineEntry; // real original (trampoline)
         }
         if (chain[i].originalPtrLocation) {
-            *chain[i].originalPtrLocation = nextTarget;
+            std::atomic_ref<void*>(*chain[i].originalPtrLocation).store(nextTarget, std::memory_order_release);
         }
     }
 
@@ -380,9 +381,6 @@ auto Remove(void*& target, const void* detour) -> Result<void> {
         return Result<void>::Ok();
     }
 
-    // Last node, full removal
-    entry->chain.erase(it);
-
     // Freeze threads + restore prologue.
     {
 #ifdef MORTIS_OS_LINUX
@@ -422,6 +420,11 @@ auto Remove(void*& target, const void* detour) -> Result<void> {
             return Result<void>::Err(unpatchResult.code(), unpatchResult.error());
         }
     }
+
+    // Unpatch succeeded — now safe to clear the chain node.
+    entry->chain.erase(std::ranges::find_if(entry->chain, [detour](const ChainNode& n) {
+        return n.detourRawFn == detour;
+    }));
 
     // Free the trampoline slot.
     TrampolineAllocator::Instance().free(entry->trampoline);
