@@ -18,7 +18,7 @@ jobs:
             cmake-preset: default
             cmake-args: ""
 
-          - os: windows-arm64
+          - os: windows-11-arm
             arch: arm64
             name: Windows ARM64
             cmake-preset: default
