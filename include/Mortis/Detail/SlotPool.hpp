@@ -8,6 +8,7 @@
 #include <mutex>
 #include <optional>
 #include <utility>
+#include <version>
 
 namespace Mortis::Detail {
 
@@ -18,8 +19,12 @@ class SlotPool;
 template <typename R, typename... Args, int MaxSlots>
 class SlotPool<R(Args...), MaxSlots> {
 public:
-    using FnPtr  = R (*)(Args...);
+    using FnPtr = R (*)(Args...);
+#if defined(__cpp_lib_move_only_function) && __cpp_lib_move_only_function >= 202110L
     using Detour = std::move_only_function<R(OriginalFunction<R(Args...)>&, Args...)>;
+#else
+    using Detour = std::function<R(OriginalFunction<R(Args...)>&, Args...)>;
+#endif
 
     /// @return The global singleton instance.
     static auto Instance() -> SlotPool& {
