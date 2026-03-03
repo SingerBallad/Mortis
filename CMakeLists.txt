@@ -49,6 +49,21 @@ set(CAPSTONE_LOONGARCH_SUPPORT OFF CACHE BOOL "" FORCE)
 set(CAPSTONE_XTENSA_SUPPORT OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(capstone)
 
+# Silence third-party warnings from capstone.
+if(TARGET capstone)
+    if(MSVC)
+        # Remove capstone's own /W1 before setting /W0
+        get_target_property(_cs_opts capstone COMPILE_OPTIONS)
+        if(_cs_opts)
+            list(FILTER _cs_opts EXCLUDE REGEX "/[Ww][0-4]")
+            set_target_properties(capstone PROPERTIES COMPILE_OPTIONS "${_cs_opts}")
+        endif()
+        target_compile_options(capstone PRIVATE /W0)
+    else()
+        target_compile_options(capstone PRIVATE -w)
+    endif()
+endif()
+
 FetchContent_Declare(
     libhat
     GIT_REPOSITORY https://github.com/BasedInc/libhat.git
