@@ -59,7 +59,10 @@ auto EnumerateFast(std::vector<void*>& handles) -> bool {
     while (true) {
         HANDLE   hNext  = nullptr;
         NTSTATUS status = ntGetNextThread(hProcess, hThread, kAccess, 0, 0, &hNext);
-        if (hThread) CloseHandle(hThread);
+        if (hThread) {
+            CloseHandle(hThread);
+            hThread = nullptr;
+        }
         if (status != 0) break; // STATUS_NO_MORE_ENTRIES or error
 
         hThread = hNext;
