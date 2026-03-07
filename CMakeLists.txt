@@ -197,6 +197,7 @@ if(MORTIS_BUILD_TESTS)
         tests/TestInlineHook.cpp
         tests/TestMemoryScanner.cpp
         tests/TestHookRobustness.cpp
+        tests/TestHookMacro.cpp
     )
     if(WIN32)
         list(APPEND TEST_SOURCES tests/TestImportHook.cpp)
