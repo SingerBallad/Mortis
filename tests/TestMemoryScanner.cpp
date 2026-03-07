@@ -1,5 +1,7 @@
 #include "TestHelpers.hpp"
 #include <Mortis/Process.hpp>
+#include <Mortis/Detail/CompileSignature.hpp>
+
 #include <gtest/gtest.h>
 
 #include <array>
@@ -355,3 +357,117 @@ TEST(MemoryScanner, ScanBufferWildcard) {
     ASSERT_TRUE(result.hasResult());
     EXPECT_EQ(result.getRaw(), &buf[0]);
 }
+
+// CompileSignature / _sig literal tests
+using namespace Mortis::literals::signature_literals;
+
+TEST(CompileSignature, BasicParse) {
+    constexpr auto sig = Mortis::CompileSignature<"48 8B CC">();
+    static_assert(sig.size() == 3);
+    EXPECT_TRUE(sig[0].isConcrete());
+    EXPECT_TRUE(sig[0].matches(std::byte{0x48}));
+    EXPECT_TRUE(sig[1].isConcrete());
+    EXPECT_TRUE(sig[1].matches(std::byte{0x8B}));
+    EXPECT_TRUE(sig[2].isConcrete());
+    EXPECT_TRUE(sig[2].matches(std::byte{0xCC}));
+}
+
+TEST(CompileSignature, WildcardSingle) {
+    constexpr auto sig = Mortis::CompileSignature<"AA ? BB">();
+    static_assert(sig.size() == 3);
+    EXPECT_TRUE(sig[0].isConcrete());
+    EXPECT_TRUE(sig[1].isWildcard());
+    EXPECT_TRUE(sig[2].isConcrete());
+}
+
+TEST(CompileSignature, WildcardDouble) {
+    constexpr auto sig = Mortis::CompileSignature<"AA ?? BB">();
+    static_assert(sig.size() == 3);
+    EXPECT_TRUE(sig[1].isWildcard());
+}
+
+TEST(CompileSignature, PartialMaskHighNibble) {
+    // "4?" means high nibble is 0x4, low nibble is wildcard → mask 0xF0.
+    // The first non-wildcard byte must be fully specified, so place the
+    // partial mask after a concrete byte.
+    constexpr auto sig = Mortis::CompileSignature<"8B 4?">();
+    static_assert(sig.size() == 2);
+    EXPECT_TRUE(sig[0].isConcrete());  // first byte is concrete
+    EXPECT_FALSE(sig[1].isWildcard());
+    EXPECT_FALSE(sig[1].isConcrete());
+    EXPECT_TRUE(sig[1].matches(std::byte{0x48}));
+    EXPECT_TRUE(sig[1].matches(std::byte{0x4F}));
+    EXPECT_FALSE(sig[1].matches(std::byte{0x58}));
+}
+
+TEST(CompileSignature, PartialMaskLowNibble) {
+    // "?B" means low nibble is 0xB, high nibble is wildcard → mask 0x0F.
+    // Partial mask must come after a fully-specified first byte.
+    constexpr auto sig = Mortis::CompileSignature<"CC ?B">();
+    static_assert(sig.size() == 2);
+    EXPECT_TRUE(sig[0].isConcrete());  // first byte is concrete
+    EXPECT_FALSE(sig[1].isWildcard());
+    EXPECT_FALSE(sig[1].isConcrete());
+    EXPECT_TRUE(sig[1].matches(std::byte{0x0B}));
+    EXPECT_TRUE(sig[1].matches(std::byte{0xAB}));
+    EXPECT_FALSE(sig[1].matches(std::byte{0xAC}));
+}
+
+TEST(CompileSignature, SigLiteral) {
+    constexpr auto sig = "48 8B ? CC"_sig;
+    static_assert(sig.size() == 4);
+    EXPECT_TRUE(sig[0].isConcrete());
+    EXPECT_TRUE(sig[0].matches(std::byte{0x48}));
+    EXPECT_TRUE(sig[1].isConcrete());
+    EXPECT_TRUE(sig[2].isWildcard());
+    EXPECT_TRUE(sig[3].isConcrete());
+}
+
+TEST(CompileSignature, SigvLiteral) {
+    auto view = "AA BB CC"_sigv;
+    EXPECT_EQ(view.size(), 3u);
+    EXPECT_TRUE(view[0].matches(std::byte{0xAA}));
+    EXPECT_TRUE(view[1].matches(std::byte{0xBB}));
+    EXPECT_TRUE(view[2].matches(std::byte{0xCC}));
+}
+
+TEST(CompileSignature, LowercaseHex) {
+    constexpr auto sig = "de ad be ef"_sig;
+    static_assert(sig.size() == 4);
+    EXPECT_TRUE(sig[0].matches(std::byte{0xDE}));
+    EXPECT_TRUE(sig[1].matches(std::byte{0xAD}));
+    EXPECT_TRUE(sig[2].matches(std::byte{0xBE}));
+    EXPECT_TRUE(sig[3].matches(std::byte{0xEF}));
+}
+
+TEST(CompileSignature, UsableWithScanBuffer) {
+    const std::array buf = {
+        std::byte{0x48}, std::byte{0x8B}, std::byte{0x01}, std::byte{0xCC},
+        std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+    };
+    constexpr auto sig = "48 8B ? CC"_sig;
+    auto result = MemoryScanner::ScanBuffer(buf, sig);
+    ASSERT_TRUE(result.hasResult());
+    EXPECT_EQ(result.getRaw(), &buf[0]);
+}
+
+TEST(CompileSignature, ConsistencyWithRuntimeParse) {
+    // Compile-time and runtime parsing should produce identical results.
+    constexpr auto compiled = "48 8B ? CC"_sig;
+    auto runtimeSig = MemoryScanner::ParseSignature("48 8B ? CC");
+    ASSERT_TRUE(runtimeSig.has_value());
+    ASSERT_EQ(compiled.size(), runtimeSig->size());
+    for (std::size_t i = 0; i < compiled.size(); ++i) {
+        EXPECT_EQ(compiled[i], (*runtimeSig)[i]) << "Mismatch at index " << i;
+    }
+}
+
+TEST(CompileSignature, MultipleSpaces) {
+    // Extra spaces between tokens should be ignored.
+    constexpr auto sig = "AA  BB   CC"_sig;
+    static_assert(sig.size() == 3);
+    EXPECT_TRUE(sig[0].matches(std::byte{0xAA}));
+    EXPECT_TRUE(sig[1].matches(std::byte{0xBB}));
+    EXPECT_TRUE(sig[2].matches(std::byte{0xCC}));
+}
+
