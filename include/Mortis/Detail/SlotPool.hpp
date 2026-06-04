@@ -19,7 +19,7 @@ class SlotPool;
 template <typename R, typename... Args, int MaxSlots>
 class SlotPool<R(Args...), MaxSlots> {
 public:
-    using FnPtr = R (*)(Args...);
+    using FnPtr  = R (*)(Args...);
 #if defined(__cpp_lib_move_only_function) && __cpp_lib_move_only_function >= 202110L
     using Detour = std::move_only_function<R(OriginalFunction<R(Args...)>&, Args...)>;
 #else

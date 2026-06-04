@@ -152,6 +152,12 @@ TEST(Result, AllErrorCodesDistinct) {
         static_cast<int>(ErrorCode::ImportNotFound),
         static_cast<int>(ErrorCode::ModuleNotFound),
         static_cast<int>(ErrorCode::InvalidArgument),
+        static_cast<int>(ErrorCode::ProcessCreateFailed),
+        static_cast<int>(ErrorCode::ProcessInjectFailed),
+        static_cast<int>(ErrorCode::UnsupportedArchitecture),
+        static_cast<int>(ErrorCode::PayloadNotFound),
+        static_cast<int>(ErrorCode::PayloadInvalid),
+        static_cast<int>(ErrorCode::RemoteMemoryFailed),
     };
     std::sort(codes.begin(), codes.end());
     auto it = std::unique(codes.begin(), codes.end());

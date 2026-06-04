@@ -20,6 +20,7 @@ FetchContent_Declare(
     capstone
     GIT_REPOSITORY https://github.com/capstone-engine/capstone
     GIT_TAG v6
+    EXCLUDE_FROM_ALL
 )
 set(CAPSTONE_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(CAPSTONE_BUILD_CSTOOL OFF CACHE BOOL "" FORCE)
@@ -128,6 +129,7 @@ if(WIN32)
     set(MORTIS_OS "WINDOWS")
     list(APPEND MORTIS_SOURCES
         src/Platform/Win32/ProcessWin32.cpp
+        src/Platform/Win32/InjectWin32.cpp
         src/Platform/Win32/ImportHookWin32.cpp
         src/Platform/Win32/ThreadFreezerWin32.cpp
     )
@@ -199,13 +201,29 @@ if(MORTIS_BUILD_TESTS)
         tests/TestHookRobustness.cpp
     )
     if(WIN32)
-        list(APPEND TEST_SOURCES tests/TestImportHook.cpp)
+        list(APPEND TEST_SOURCES
+            tests/TestImportHook.cpp
+            tests/TestInject.cpp
+        )
     endif()
 
     add_executable(MortisTests ${TEST_SOURCES})
     target_link_libraries(MortisTests PRIVATE Mortis GTest::gtest_main)
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND MSVC)
         target_compile_options(MortisTests PRIVATE -Wno-character-conversion)
+    endif()
+    if(WIN32)
+        add_executable(MortisInjectionTarget tests/InjectionTarget.cpp)
+        target_compile_features(MortisInjectionTarget PRIVATE cxx_std_23)
+
+        add_library(MortisInjectionDll SHARED
+            tests/InjectionDll.cpp
+            tests/InjectionDll.def
+        )
+        target_link_libraries(MortisInjectionDll PRIVATE Mortis)
+        target_compile_features(MortisInjectionDll PRIVATE cxx_std_23)
+
+        add_dependencies(MortisTests MortisInjectionTarget MortisInjectionDll)
     endif()
     include(GoogleTest)
     gtest_discover_tests(MortisTests)

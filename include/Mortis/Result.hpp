@@ -19,6 +19,12 @@ enum class ErrorCode : std::uint8_t {
     ImportNotFound,    ///< Import entry not found in module.
     ModuleNotFound,    ///< Module not found.
     InvalidArgument,   ///< Invalid argument passed to API.
+    ProcessCreateFailed, ///< Failed to create a process.
+    ProcessInjectFailed, ///< Failed to inject into a process.
+    UnsupportedArchitecture, ///< Target architecture is unsupported.
+    PayloadNotFound,    ///< Injection payload was not found.
+    PayloadInvalid,     ///< Injection payload is malformed.
+    RemoteMemoryFailed, ///< Remote process memory operation failed.
 };
 
 /// @brief Structured error payload: code + human-readable message.

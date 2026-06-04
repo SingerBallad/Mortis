@@ -59,8 +59,8 @@ auto EnumerateFast(std::vector<void*>& handles) -> bool {
     while (true) {
         HANDLE   hNext  = nullptr;
         NTSTATUS status = ntGetNextThread(hProcess, hThread, kAccess, 0, 0, &hNext);
-        if (hThread) {
-            CloseHandle(hThread);
+        if (hThread) { 
+            CloseHandle(hThread); 
             hThread = nullptr;
         }
         if (status != 0) break; // STATUS_NO_MORE_ENTRIES or error
@@ -136,8 +136,6 @@ void ThreadFreezer::remapThreadIPs(
     void*                             trampoline,
     const std::span<const AlignEntry> alignMap
 ) const {
-    if (alignMap.empty()) return;
-
     const auto targetAddr     = reinterpret_cast<std::uint64_t>(target);
     const auto trampolineAddr = reinterpret_cast<std::uint64_t>(trampoline);
 
@@ -149,20 +147,13 @@ void ThreadFreezer::remapThreadIPs(
         const auto ip = GetIp(ctx);
         if (ip < targetAddr || ip >= targetAddr + prologueSize) continue;
 
-        const auto offset = ip - targetAddr;
-        bool remapped = false;
-        for (std::size_t i = 0; i + 1 < alignMap.size(); ++i) {
-            if (offset >= alignMap[i].targetOffset && offset < alignMap[i + 1].targetOffset) {
-                const auto delta = offset - alignMap[i].targetOffset;
-                SetIp(ctx, trampolineAddr + alignMap[i].trampolineOffset + delta);
+        const auto offset = static_cast<std::uint8_t>(ip - targetAddr);
+        for (const auto& [targetOffset, trampolineOffset] : alignMap) {
+            if (targetOffset == offset) {
+                SetIp(ctx, trampolineAddr + trampolineOffset);
                 SetThreadContext(h, &ctx);
-                remapped = true;
                 break;
             }
-        }
-        if (!remapped && offset == alignMap.back().targetOffset) {
-            SetIp(ctx, trampolineAddr + alignMap.back().trampolineOffset);
-            SetThreadContext(h, &ctx);
         }
     }
 }
@@ -186,21 +177,13 @@ void ThreadFreezer::reverseRemapThreadIPs(
         const auto ip = GetIp(ctx);
         if (ip < trampolineAddr || ip >= trampolineAddr + relocatedSize) continue;
 
-        const auto offset = ip - trampolineAddr;
-        bool remapped = false;
-        for (std::size_t i = 0; i + 1 < alignMap.size(); ++i) {
-            if (offset >= alignMap[i].trampolineOffset && offset < alignMap[i + 1].trampolineOffset) {
-                const auto delta = offset - alignMap[i].trampolineOffset;
-                SetIp(ctx, targetAddr + alignMap[i].targetOffset + delta);
+        const auto offset = static_cast<std::uint8_t>(ip - trampolineAddr);
+        for (const auto& [targetOffset, trampolineOffset] : alignMap) {
+            if (trampolineOffset == offset) {
+                SetIp(ctx, targetAddr + targetOffset);
                 SetThreadContext(h, &ctx);
-                remapped = true;
                 break;
             }
-        }
-
-        if (!remapped && offset == alignMap.back().trampolineOffset) {
-            SetIp(ctx, targetAddr + alignMap.back().targetOffset);
-            SetThreadContext(h, &ctx);
         }
     }
 }
