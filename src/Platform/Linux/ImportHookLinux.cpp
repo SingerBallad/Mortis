@@ -1,7 +1,6 @@
 #include <Mortis/Config.hpp>
 #include <Mortis/Detail/ImportHookImpl.hpp>
 
-#include <cstdio>
 #include <dlfcn.h>
 #include <elf.h>
 #include <link.h>
@@ -103,46 +102,26 @@ auto FindGotEntry(const std::string_view moduleName, const std::string_view symb
     return std::nullopt;
 }
 
-/// Query the current PROT_* flags for the page containing @p addr by
-/// parsing /proc/self/maps.  Returns PROT_READ | PROT_WRITE as a safe
-/// fallback if the lookup fails (GOT pages are normally RW).
-int QueryPageProtection(const void* addr) {
-    auto* f = std::fopen("/proc/self/maps", "r");
-    if (!f) return PROT_READ | PROT_WRITE;
-
-    const auto target = reinterpret_cast<unsigned long>(addr);
-    unsigned long start, end;
-    char perms[5];
-    int  prot = PROT_READ | PROT_WRITE; // fallback
-    while (std::fscanf(f, "%lx-%lx %4s%*[^\n]\n", &start, &end, perms) == 3) {
-        if (target >= start && target < end) {
-            prot = 0;
-            if (perms[0] == 'r') prot |= PROT_READ;
-            if (perms[1] == 'w') prot |= PROT_WRITE;
-            if (perms[2] == 'x') prot |= PROT_EXEC;
-            break;
-        }
-    }
-    std::fclose(f);
-    return prot;
-}
-
-/// mprotect helper: temporarily adds PROT_WRITE, writes @p value to
-/// @p slot, then restores the original page protection.
+/// mprotect helper: makes the GOT slot's page writable and stores @p value.
+///
+/// The page is deliberately left writable afterwards.  A GOT slot lives in
+/// .got / .got.plt, and for a lazily-bound module the dynamic linker keeps
+/// writing *neighbouring* .got.plt entries on demand during PLT resolution
+/// (_dl_fixup).  When the slot's page sits immediately after the RELRO region,
+/// restoring it to read-only makes the next lazy resolution of an unrelated
+/// symbol on that same page fault with SIGSEGV (SEGV_ACCERR).  Keeping the page
+/// writable — the standard trade-off for runtime import hooking — never breaks
+/// lazy binding; the only cost is leaving that single GOT page write-enabled,
+/// which is already required for the loader to use it.
 Result<void> WriteGotSlot(Address* slot, Address value) {
     const auto pageSize = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
     const auto slotAddr = reinterpret_cast<Address>(slot);
-    const auto aligned  = slotAddr & ~(pageSize - 1);
-    auto* const page    = reinterpret_cast<void*>(aligned);
+    auto* const page    = reinterpret_cast<void*>(slotAddr & ~(pageSize - 1));
 
-    const int origProt = QueryPageProtection(slot);
-
-    if (mprotect(page, pageSize, origProt | PROT_WRITE) != 0)
+    if (mprotect(page, pageSize, PROT_READ | PROT_WRITE) != 0)
         return Result<void>::Err(ErrorCode::ProtectionFailed, "Failed to make GOT writable");
 
     *slot = value;
-
-    mprotect(page, pageSize, origProt);
     return Result<void>::Ok();
 }
 
