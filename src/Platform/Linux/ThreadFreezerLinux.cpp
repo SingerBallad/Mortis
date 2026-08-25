@@ -22,10 +22,6 @@ namespace {
 /// @brief Maximum number of threads simultaneously frozen.
 constexpr int kMaxFrozenThreads = 4096;
 
-/// @brief Signal used for thread freezing (first available real-time signal).
-// NOLINTNEXTLINE(cert-err58-cpp)
-const int kFreezeSignal = SIGRTMIN;
-
 /// @brief Global freeze coordination state (serialized by g_hookMutex).
 struct FreezeState {
     /// Futex word: 1 = freeze active, 0 = threads should resume.
@@ -174,13 +170,26 @@ auto ThreadFreezer::Create() -> Result<ThreadFreezer> {
         return Result<ThreadFreezer>::Ok(std::move(freezer));
     }
 
-    // Install signal handler with SA_SIGINFO to receive ucontext.
+    // Install signal handler with SA_SIGINFO to receive ucontext. Probe the whole
+    // real-time signal range and use the first signal whose handler installs: a
+    // targeted anti-hook seccomp filter can reject rt_sigaction for the well-known
+    // default (SIGRTMIN) without breaking the host app, so we must not depend on a
+    // single fixed signal. FreezeSignalHandler ignores the signal number, so any
+    // installed RT signal works identically.
     struct sigaction sa{};
     struct sigaction oldSa{};
     sa.sa_sigaction = FreezeSignalHandler;
     sa.sa_flags     = SA_SIGINFO | SA_RESTART;
     sigfillset(&sa.sa_mask); // Block all other signals inside handler.
-    if (sigaction(kFreezeSignal, &sa, &oldSa) != 0) {
+
+    int freezeSig = 0;
+    for (int candidate = SIGRTMIN; candidate <= SIGRTMAX; ++candidate) {
+        if (sigaction(candidate, &sa, &oldSa) == 0) {
+            freezeSig = candidate;
+            break;
+        }
+    }
+    if (freezeSig == 0) {
         return Result<ThreadFreezer>::Err(ErrorCode::HookInstallFailed, "Failed to install freeze signal handler");
     }
 
@@ -191,7 +200,7 @@ auto ThreadFreezer::Create() -> Result<ThreadFreezer> {
     freezer.handles_.reserve(tids.size());
     int sentCount = 0;
     for (const pid_t tid : tids) {
-        if (syscall(SYS_tgkill, getpid(), tid, kFreezeSignal) == 0) {
+        if (syscall(SYS_tgkill, getpid(), tid, freezeSig) == 0) {
             freezer.handles_.push_back(tid);
             ++sentCount;
         }
@@ -209,7 +218,7 @@ auto ThreadFreezer::Create() -> Result<ThreadFreezer> {
     }
 
     // Restore old signal handler (all signals already delivered).
-    sigaction(kFreezeSignal, &oldSa, nullptr);
+    sigaction(freezeSig, &oldSa, nullptr);
 
     if (g_freezeState.contextCount.load(std::memory_order_acquire) > kMaxFrozenThreads) {
         return Result<ThreadFreezer>::Err(
