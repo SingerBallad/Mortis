@@ -1,6 +1,7 @@
 #include <Mortis/Config.hpp>
 #include <Mortis/Detail/ImportHookImpl.hpp>
 
+#include <cstdio>
 #include <dlfcn.h>
 #include <elf.h>
 #include <link.h>
@@ -102,6 +103,49 @@ auto FindGotEntry(const std::string_view moduleName, const std::string_view symb
     return std::nullopt;
 }
 
+/// Query the current PROT_* flags for the page containing @p addr by
+/// parsing /proc/self/maps.  Returns PROT_READ | PROT_WRITE as a safe
+/// fallback if the lookup fails (GOT pages are normally RW).
+int QueryPageProtection(const void* addr) {
+    auto* f = std::fopen("/proc/self/maps", "r");
+    if (!f) return PROT_READ | PROT_WRITE;
+
+    const auto target = reinterpret_cast<unsigned long>(addr);
+    unsigned long start, end;
+    char perms[5];
+    int  prot = PROT_READ | PROT_WRITE; // fallback
+    while (std::fscanf(f, "%lx-%lx %4s%*[^\n]\n", &start, &end, perms) == 3) {
+        if (target >= start && target < end) {
+            prot = 0;
+            if (perms[0] == 'r') prot |= PROT_READ;
+            if (perms[1] == 'w') prot |= PROT_WRITE;
+            if (perms[2] == 'x') prot |= PROT_EXEC;
+            break;
+        }
+    }
+    std::fclose(f);
+    return prot;
+}
+
+/// mprotect helper: temporarily adds PROT_WRITE, writes @p value to
+/// @p slot, then restores the original page protection.
+Result<void> WriteGotSlot(Address* slot, Address value) {
+    const auto pageSize = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
+    const auto slotAddr = reinterpret_cast<Address>(slot);
+    const auto aligned  = slotAddr & ~(pageSize - 1);
+    auto* const page    = reinterpret_cast<void*>(aligned);
+
+    const int origProt = QueryPageProtection(slot);
+
+    if (mprotect(page, pageSize, origProt | PROT_WRITE) != 0)
+        return Result<void>::Err(ErrorCode::ProtectionFailed, "Failed to make GOT writable");
+
+    *slot = value;
+
+    mprotect(page, pageSize, origProt);
+    return Result<void>::Ok();
+}
+
 } // anonymous namespace
 
 auto PatchImportEntry(
@@ -115,17 +159,7 @@ auto PatchImportEntry(
     if (!entry) return Result<void>::Err(ErrorCode::ImportNotFound, "GOT entry not found");
 
     *originalFunction = reinterpret_cast<void*>(*entry->slot);
-
-    const auto pageSize = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
-    const auto slotAddr = reinterpret_cast<Address>(entry->slot);
-    const auto aligned  = slotAddr & ~(pageSize - 1);
-
-    if (mprotect(reinterpret_cast<void*>(aligned), pageSize, PROT_READ | PROT_WRITE) != 0)
-        return Result<void>::Err(ErrorCode::ProtectionFailed, "Failed to make GOT writable");
-
-    *entry->slot = reinterpret_cast<Address>(newFunction);
-    mprotect(reinterpret_cast<void*>(aligned), pageSize, PROT_READ);
-    return Result<void>::Ok();
+    return WriteGotSlot(entry->slot, reinterpret_cast<Address>(newFunction));
 }
 
 auto UnpatchImportEntry(
@@ -137,16 +171,7 @@ auto UnpatchImportEntry(
     auto entry = FindGotEntry(moduleName, functionName);
     if (!entry) return Result<void>::Err(ErrorCode::ImportNotFound, "GOT entry not found");
 
-    const auto pageSize = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
-    const auto slotAddr = reinterpret_cast<Address>(entry->slot);
-    const auto aligned  = slotAddr & ~(pageSize - 1);
-
-    if (mprotect(reinterpret_cast<void*>(aligned), pageSize, PROT_READ | PROT_WRITE) != 0)
-        return Result<void>::Err(ErrorCode::ProtectionFailed, "Failed to make GOT writable");
-
-    *entry->slot = reinterpret_cast<Address>(originalFunction);
-    mprotect(reinterpret_cast<void*>(aligned), pageSize, PROT_READ);
-    return Result<void>::Ok();
+    return WriteGotSlot(entry->slot, reinterpret_cast<Address>(originalFunction));
 }
 
 } // namespace Mortis::ImportHookImpl
