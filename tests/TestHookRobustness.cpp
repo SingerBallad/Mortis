@@ -299,6 +299,35 @@ TEST(HookRobustness, ToggleUnderConcurrentCalls) {
     }
 }
 
+TEST(HookRobustness, InstallRemoveUnderConcurrentCalls) {
+    constexpr int            kWorkers = 4;
+    std::atomic<bool>        stop{false};
+    std::atomic<int>         bad{0};
+    std::atomic<long>        calls{0};
+    std::vector<std::thread> workers;
+
+    for (int i = 0; i < kWorkers; ++i) {
+        workers.emplace_back([&] {
+            while (!stop.load(std::memory_order_relaxed)) {
+                const int r = IndirectCall(Multiply, 3, 4);
+                if (r != 12 && r != 13) bad.fetch_add(1, std::memory_order_relaxed);
+                calls.fetch_add(1, std::memory_order_relaxed);
+            }
+        });
+    }
+
+    for (int cycle = 0; cycle < 1000; ++cycle) {
+        auto hook =
+            InlineHook::Create(&Multiply, [](auto& original, int a, int b) -> int { return original(a, b) + 1; });
+        ASSERT_TRUE(hook) << hook.error();
+        hook = Result<InlineHookHandle<int(int, int)>>::Err(ErrorCode::Unknown, ""); // remove under load
+    }
+
+    stop.store(true, std::memory_order_relaxed);
+    for (auto& w : workers) w.join();
+    EXPECT_EQ(bad.load(), 0) << "observed " << calls.load() << " calls";
+}
+
 //  9. Chain Hooking (sequential hooks on same function)
 
 TEST(HookRobustness, SequentialHookUnhook) {
