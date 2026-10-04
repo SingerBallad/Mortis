@@ -35,12 +35,20 @@ public:
     /// @brief Reverse-remap thread IPs from trampoline back to target.
     void reverseRemapThreadIPs(void* trampoline, void* target, std::span<const AlignEntry> alignMap) const;
 
+    /// @brief Redirect any frozen thread whose IP lies in [lo, hi) to @p dest.
+    void remapRange(std::uint64_t lo, std::uint64_t hi, std::uint64_t dest) const;
+
+    /// @brief Whether any frozen thread's IP lies in [lo, hi).
+    [[nodiscard]] auto anyThreadInRange(std::uint64_t lo, std::uint64_t hi) const -> bool;
+
 private:
     ThreadFreezer() = default;
 
     /// Platform-specific thread handle alias.
     using HandleType = PlatformDetail::NativeThreadHandle;
     std::vector<HandleType> handles_;
+
+    int freezeSig_ = 0;
 };
 
 } // namespace Mortis::HookEngine

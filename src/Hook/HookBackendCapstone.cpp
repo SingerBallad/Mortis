@@ -21,6 +21,7 @@
 #include <cstring>
 #include <mutex>
 #include <span>
+#include <thread>
 
 namespace Mortis::HookBackendImpl {
 
@@ -180,7 +181,14 @@ static auto SkipJumpStubsSafe(void* code) -> void* {
 }
 
 //  Install
-auto Install(void*& target, void* detour, int priority, void** originalPtrLocation) -> Result<void> {
+auto Install(
+    void*&            target,
+    void*             detour,
+    int               priority,
+    void**            originalPtrLocation,
+    std::atomic<int>* activeCounter,
+    std::size_t       dispatchSpan
+) -> Result<void> {
     std::lock_guard lock(g_hookMutex);
     using namespace HookEngine;
 
@@ -201,6 +209,8 @@ auto Install(void*& target, void* detour, int priority, void** originalPtrLocati
         node.sequence            = existing->nextSequence++;
         node.detourRawFn         = detour;
         node.originalPtrLocation = originalPtrLocation;
+        node.activeCounter       = activeCounter;
+        node.dispatchSpan        = dispatchSpan;
         existing->chain.push_back(node);
 
         RewireChain(*existing);
@@ -284,6 +294,12 @@ auto Install(void*& target, void* detour, int priority, void** originalPtrLocati
         return Result<void>::Err(savedResult.code(), savedResult.error());
     }
 
+    auto* trampolineCallable = slot.data() + entryOffset;
+
+    if (originalPtrLocation) {
+        std::atomic_ref<void*>(*originalPtrLocation).store(trampolineCallable, std::memory_order_release);
+    }
+
     // Freeze threads + remap IPs + patch entry.
 #ifdef MORTIS_OS_LINUX
     const auto patchAddr = reinterpret_cast<Address>(originalTarget);
@@ -345,15 +361,10 @@ auto Install(void*& target, void* detour, int priority, void** originalPtrLocati
     firstNode.sequence            = 0;
     firstNode.detourRawFn         = detour;
     firstNode.originalPtrLocation = originalPtrLocation;
+    firstNode.activeCounter       = activeCounter;
+    firstNode.dispatchSpan        = dispatchSpan;
     entry.chain.push_back(firstNode);
     entry.nextSequence = 1;
-
-    auto* trampolineCallable = slot.data() + entryOffset;
-
-    // Set the original-function pointer for the first chain node.
-    if (originalPtrLocation) {
-        std::atomic_ref<void*>(*originalPtrLocation).store(trampolineCallable, std::memory_order_release);
-    }
 
     HookRegistry::Instance().add(trampolineCallable, std::move(entry));
 
@@ -382,6 +393,11 @@ auto Remove(void*& target, const void* detour) -> Result<void> {
         return Result<void>::Err(ErrorCode::HookRemoveFailed, "Detour not found in hook chain");
     }
 
+    // Slot counter of the detour being removed, drained before the trampoline is freed,
+    // and the dispatch stub's byte span for the frozen quiescence probe.
+    std::atomic<int>* activeCounter = it->activeCounter;
+    const std::size_t dispatchSpan  = it->dispatchSpan;
+
     // Chain has more than one node, partial removal
     if (entry->chain.size() > 1) {
         entry->chain.erase(it);
@@ -392,8 +408,9 @@ auto Remove(void*& target, const void* detour) -> Result<void> {
         return Result<void>::Ok();
     }
 
-    // Freeze threads + restore prologue.
     {
+        const std::uint64_t kDispatchStubProbe = dispatchSpan != 0 ? dispatchSpan : 4096;
+        constexpr int       kMaxFreezeAttempts = 100000;
 #ifdef MORTIS_OS_LINUX
         const auto patchAddr = reinterpret_cast<Address>(entry->originalTarget);
         const auto patchSize = entry->savedPrologue.size();
@@ -406,42 +423,64 @@ auto Remove(void*& target, const void* detour) -> Result<void> {
             return Result<void>::Err(setProt.error());
         }
 #endif
-        Result<void> unpatchResult = Result<void>::Ok();
-        {
-            const auto freezerResult = ThreadFreezer::Create();
+        const auto trampolineBase = reinterpret_cast<std::uint64_t>(entry->trampoline);
+        const auto originalEntry  = reinterpret_cast<std::uint64_t>(entry->originalTarget);
+        const auto dispatchLo     = reinterpret_cast<std::uint64_t>(detour);
+        const auto dispatchHi     = dispatchLo + kDispatchStubProbe;
+
+        bool unpatched = false;
+        bool freed     = false;
+        for (int attempt = 0; attempt < kMaxFreezeAttempts && !freed; ++attempt) {
+            auto freezerResult = ThreadFreezer::Create();
             if (!freezerResult) {
 #ifdef MORTIS_OS_LINUX
                 (void)Process::SetProtectionRaw(patchAddr, patchSize, oldProt.value());
 #endif
                 return Result<void>::Err(freezerResult.code(), freezerResult.error());
             }
-            const auto& freezer = *freezerResult;
+            auto& freezer = *freezerResult;
 
             auto* trampolineEntry = static_cast<std::uint8_t*>(target);
             freezer.reverseRemapThreadIPs(trampolineEntry, entry->originalTarget, entry->alignMap);
+            freezer.remapRange(trampolineBase, trampolineBase + entry->entryOffset, originalEntry);
 
+            if (!unpatched) {
 #ifdef MORTIS_OS_LINUX
-            unpatchResult =
-                UnpatchEntryAssumeWritable(entry->originalTarget, std::span<const std::uint8_t>(entry->savedPrologue));
+                auto unpatchResult = UnpatchEntryAssumeWritable(
+                    entry->originalTarget,
+                    std::span<const std::uint8_t>(entry->savedPrologue)
+                );
 #else
-            unpatchResult = UnpatchEntry(entry->originalTarget, std::span<const std::uint8_t>(entry->savedPrologue));
+                auto unpatchResult =
+                    UnpatchEntry(entry->originalTarget, std::span<const std::uint8_t>(entry->savedPrologue));
 #endif
+                if (!unpatchResult) {
+#ifdef MORTIS_OS_LINUX
+                    (void)Process::SetProtectionRaw(patchAddr, patchSize, oldProt.value());
+#endif
+                    return Result<void>::Err(unpatchResult.code(), unpatchResult.error());
+                }
+                unpatched = true;
+            }
+
+            const bool busy = (activeCounter != nullptr && activeCounter->load(std::memory_order_acquire) != 0)
+                           || freezer.anyThreadInRange(dispatchLo, dispatchHi);
+            if (!busy) {
+                // Nothing executes the hook path — safe to free while still frozen.
+                TrampolineAllocator::Instance().free(entry->trampoline);
+                freed = true;
+            }
+            if (!freed) std::this_thread::yield();
         }
 #ifdef MORTIS_OS_LINUX
         (void)Process::SetProtectionRaw(patchAddr, patchSize, oldProt.value());
 #endif
-        if (!unpatchResult) {
-            return Result<void>::Err(unpatchResult.code(), unpatchResult.error());
-        }
     }
 
-    // Unpatch succeeded — now safe to clear the chain node.
+    // Clear the chain node.
     entry->chain.erase(std::ranges::find_if(entry->chain, [detour](const ChainNode& n) {
         return n.detourRawFn == detour;
     }));
-
-    // Free the trampoline slot.
-    TrampolineAllocator::Instance().free(entry->trampoline);
 
     // Restore target pointer to original function.
     auto* originalTarget = entry->originalTarget;

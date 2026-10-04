@@ -9,9 +9,12 @@
 #include <ucontext.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <atomic>
-#include <chrono>
+#include <cstdint>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <vector>
 
@@ -21,6 +24,20 @@ namespace {
 
 /// @brief Maximum number of threads simultaneously frozen.
 constexpr int kMaxFrozenThreads = 4096;
+
+/// @brief Upper bound on spins waiting for frozen threads to restore their signal
+///        mask on teardown (sigreturn is near-instant, so this breaks after one or
+///        two passes in practice; the cap only bounds the pathological case where a
+///        thread re-blocks the freeze signal for its own reasons — the stability
+///        re-read on the next enumeration still catches a straggler).
+constexpr int kMaskRestoreMaxSpins = 2'000;
+
+/// @brief How many times to re-read a thread's SigBlk before concluding it
+///        *genuinely* blocks the freeze signal rather than merely unwinding from a
+///        previous freeze's handler (where the kernel masks it until sigreturn).
+///        A transient clears within a read or two; genuine blockers are rare, so a
+///        small count keeps the hot path (Remove's retry loop) cheap.
+constexpr int kBlockerConfirmReads = 8;
 
 /// @brief Global freeze coordination state (serialized by g_hookMutex).
 struct FreezeState {
@@ -39,6 +56,11 @@ struct FreezeState {
     /// Saved ucontext pointers from each frozen thread.
     std::atomic<ucontext_t*> contexts[kMaxFrozenThreads]{};
 
+    /// TID of the thread that stored each context (parallel to @ref contexts),
+    /// so the freeze can tell which signalled threads have acknowledged without a
+    /// wall-clock timeout.
+    std::atomic<pid_t> ackTids[kMaxFrozenThreads]{};
+
     void Reset() {
         active.store(0, std::memory_order_relaxed);
         readyCount.store(0, std::memory_order_relaxed);
@@ -47,18 +69,76 @@ struct FreezeState {
         for (auto& ctx : contexts) {
             ctx.store(nullptr, std::memory_order_relaxed);
         }
+        for (auto& t : ackTids) {
+            t.store(0, std::memory_order_relaxed);
+        }
     }
 };
 
 FreezeState g_freezeState;
 
+/// @brief Bit mask value for a signal number in a /proc SigBlk-style mask.
+/// @param sig Signal number (1-based, as used by the kernel/sigaction).
+constexpr auto SignalBit(const int sig) -> std::uint64_t { return std::uint64_t{1} << (sig - 1); }
+
+/// @brief Read a thread's blocked-signal mask from /proc/self/task/<tid>/status.
+/// @return The blocked mask, or 0 if it cannot be read (treat as "blocks nothing").
+auto ReadBlockedMask(const pid_t tid) -> std::uint64_t {
+    char path[64];
+    std::snprintf(path, sizeof(path), "/proc/self/task/%d/status", static_cast<int>(tid));
+
+    std::FILE* file = std::fopen(path, "re");
+    if (!file) return 0;
+
+    std::uint64_t mask = 0;
+    char          line[256];
+    while (std::fgets(line, sizeof(line), file) != nullptr) {
+        if (std::strncmp(line, "SigBlk:", 7) == 0) {
+            mask = std::strtoull(line + 7, nullptr, 16);
+            break;
+        }
+    }
+    std::fclose(file);
+    return mask;
+}
+
+/// @brief Whether a signalled thread can no longer acknowledge the freeze — it has
+///        exited, or our signal is pending on it yet blocked, so it will never be
+///        delivered (the thread blocked freezeSig after we sent it).  Used to drop
+///        laggards so the ready-wait always terminates.
+auto LaggardCannotRespond(const pid_t tid, const std::uint64_t freezeBit) -> bool {
+    char path[64];
+    std::snprintf(path, sizeof(path), "/proc/self/task/%d/status", static_cast<int>(tid));
+
+    std::FILE* file = std::fopen(path, "re");
+    if (!file) return true; // Exited.
+
+    std::uint64_t pending = 0;
+    std::uint64_t blocked = 0;
+    int           seen    = 0;
+    char          line[256];
+    while (seen < 2 && std::fgets(line, sizeof(line), file) != nullptr) {
+        if (std::strncmp(line, "SigPnd:", 7) == 0) {
+            pending = std::strtoull(line + 7, nullptr, 16);
+            ++seen;
+        } else if (std::strncmp(line, "SigBlk:", 7) == 0) {
+            blocked = std::strtoull(line + 7, nullptr, 16);
+            ++seen;
+        }
+    }
+    std::fclose(file);
+    return (pending & blocked & freezeBit) != 0;
+}
+
 /// @brief Signal handler: stores ucontext, then blocks on futex until released.
 void FreezeSignalHandler(int /*sig*/, siginfo_t* /*info*/, void* rawCtx) {
     auto* uc = static_cast<ucontext_t*>(rawCtx);
 
-    // Store context pointer so the main thread can remap our IP.
+    if (g_freezeState.active.load(std::memory_order_acquire) == 0) return;
+
     if (const int slot = g_freezeState.contextCount.fetch_add(1, std::memory_order_relaxed); slot < kMaxFrozenThreads) {
         g_freezeState.contexts[slot].store(uc, std::memory_order_release);
+        g_freezeState.ackTids[slot].store(static_cast<pid_t>(syscall(SYS_gettid)), std::memory_order_release);
     }
 
     // Signal readiness.
@@ -156,65 +236,98 @@ auto ThreadFreezer::Create() -> Result<ThreadFreezer> {
         return Result<ThreadFreezer>::Err(ErrorCode::HookInstallFailed, "Cannot open /proc/self/task");
     }
 
-    std::vector<pid_t> tids;
-    struct dirent*     ent;
+    struct ThreadInfo {
+        pid_t         tid;
+        std::uint64_t blocked;
+    };
+    std::vector<ThreadInfo> threads;
+    std::uint64_t           blockedUnion = 0;
+
+    struct dirent* ent;
     while ((ent = readdir(dir)) != nullptr) {
         if (ent->d_name[0] == '.') continue;
         const pid_t tid = std::atoi(ent->d_name);
         if (tid == 0 || tid == selfTid) continue;
-        tids.push_back(tid);
+        const std::uint64_t blocked = ReadBlockedMask(tid);
+        threads.push_back({tid, blocked});
+        blockedUnion |= blocked;
     }
     closedir(dir);
 
-    if (tids.empty()) {
+    if (threads.empty()) {
         return Result<ThreadFreezer>::Ok(std::move(freezer));
     }
 
-    // Install signal handler with SA_SIGINFO to receive ucontext. Probe the whole
-    // real-time signal range and use the first signal whose handler installs: a
-    // targeted anti-hook seccomp filter can reject rt_sigaction for the well-known
-    // default (SIGRTMIN) without breaking the host app, so we must not depend on a
-    // single fixed signal. FreezeSignalHandler ignores the signal number, so any
-    // installed RT signal works identically.
     struct sigaction sa{};
     struct sigaction oldSa{};
     sa.sa_sigaction = FreezeSignalHandler;
     sa.sa_flags     = SA_SIGINFO | SA_RESTART;
-    sigfillset(&sa.sa_mask); // Block all other signals inside handler.
+    sigfillset(&sa.sa_mask); // Block all signals inside the handler: prevents a
+                             // rapid re-freeze from re-entering the handler on a
+                             // thread still unwinding from the previous one.
 
     int freezeSig = 0;
     for (int candidate = SIGRTMIN; candidate <= SIGRTMAX; ++candidate) {
+        if ((blockedUnion & SignalBit(candidate)) != 0) continue;
         if (sigaction(candidate, &sa, &oldSa) == 0) {
             freezeSig = candidate;
             break;
         }
     }
     if (freezeSig == 0) {
+        for (int candidate = SIGRTMIN; candidate <= SIGRTMAX; ++candidate) {
+            if (sigaction(candidate, &sa, &oldSa) == 0) {
+                freezeSig = candidate;
+                break;
+            }
+        }
+    }
+    if (freezeSig == 0) {
         return Result<ThreadFreezer>::Err(ErrorCode::HookInstallFailed, "Failed to install freeze signal handler");
     }
+    freezer.freezeSig_ = freezeSig;
 
-    // Mark freeze as active BEFORE sending signals.
+    const std::uint64_t freezeBit = SignalBit(freezeSig);
+
+    const auto genuinelyBlocks = [freezeBit](const pid_t tid) {
+        for (int i = 0; i < kBlockerConfirmReads; ++i) {
+            if ((ReadBlockedMask(tid) & freezeBit) == 0) return false; // transient — cleared
+            sched_yield();
+        }
+        return true; // stayed blocked across every read — genuine
+    };
+
+    std::vector<pid_t> toSignal;
+    toSignal.reserve(threads.size());
+    for (const auto& [tid, blocked] : threads) {
+        if ((blocked & freezeBit) == 0 || !genuinelyBlocks(tid)) {
+            toSignal.push_back(tid);
+        }
+        // else: genuine blocker — left unfrozen (see above).
+    }
+
     g_freezeState.active.store(1, std::memory_order_release);
 
-    // Send the freeze signal to every other thread via tgkill(2).
-    freezer.handles_.reserve(tids.size());
-    int sentCount = 0;
-    for (const pid_t tid : tids) {
+    // Send the freeze signal via tgkill(2) to the threads that can run the handler.
+    freezer.handles_.reserve(toSignal.size());
+    for (const pid_t tid : toSignal) {
         if (syscall(SYS_tgkill, getpid(), tid, freezeSig) == 0) {
             freezer.handles_.push_back(tid);
-            ++sentCount;
         }
     }
 
-    // Wait for all signaled threads to enter the handler.
-    if (sentCount > 0) {
-        using Clock             = std::chrono::steady_clock;
-        constexpr auto kTimeout = std::chrono::milliseconds(500);
-        const auto     deadline = Clock::now() + kTimeout;
-        while (g_freezeState.readyCount.load(std::memory_order_acquire) < sentCount) {
-            if (Clock::now() >= deadline) break;
-            sched_yield();
+    std::vector<pid_t> pending = freezer.handles_;
+    while (!pending.empty()) {
+        const int acked = std::min(g_freezeState.contextCount.load(std::memory_order_acquire), kMaxFrozenThreads);
+        for (int i = 0; i < acked; ++i) {
+            if (const pid_t t = g_freezeState.ackTids[i].load(std::memory_order_acquire); t != 0) {
+                std::erase(pending, t);
+            }
         }
+        if (pending.empty()) break;
+        std::erase_if(pending, [freezeBit](const pid_t t) { return LaggardCannotRespond(t, freezeBit); });
+        if (pending.empty()) break;
+        sched_yield();
     }
 
     // Restore old signal handler (all signals already delivered).
@@ -235,8 +348,6 @@ auto ThreadFreezer::Create() -> Result<ThreadFreezer> {
 ThreadFreezer::~ThreadFreezer() {
     if (handles_.empty()) return;
 
-    const int sentCount = static_cast<int>(handles_.size());
-
     // Release all frozen threads by clearing the futex word.
     g_freezeState.active.store(0, std::memory_order_release);
     syscall(
@@ -249,15 +360,22 @@ ThreadFreezer::~ThreadFreezer() {
         0
     );
 
-    // Wait for all threads to fully exit the signal handler before
-    // returning.  This prevents a subsequent ThreadFreezer from
-    // interfering with threads still unwinding from the old handler.
-    {
-        using Clock             = std::chrono::steady_clock;
-        constexpr auto kTimeout = std::chrono::milliseconds(500);
-        const auto     deadline = Clock::now() + kTimeout;
-        while (g_freezeState.exitCount.load(std::memory_order_acquire) < sentCount) {
-            if (Clock::now() >= deadline) break;
+    while (g_freezeState.exitCount.load(std::memory_order_acquire)
+           < g_freezeState.readyCount.load(std::memory_order_acquire)) {
+        sched_yield();
+    }
+
+    if (freezeSig_ != 0) {
+        const std::uint64_t freezeBit = SignalBit(freezeSig_);
+        for (int spins = 0; spins < kMaskRestoreMaxSpins; ++spins) {
+            bool allRestored = true;
+            for (const pid_t tid : handles_) {
+                if ((ReadBlockedMask(tid) & freezeBit) != 0) {
+                    allRestored = false;
+                    break;
+                }
+            }
+            if (allRestored) break;
             sched_yield();
         }
     }
@@ -287,6 +405,32 @@ void ThreadFreezer::remapThreadIPs(
             SetIP(uc, remapped);
         }
     }
+}
+
+void ThreadFreezer::remapRange(const std::uint64_t lo, const std::uint64_t hi, const std::uint64_t dest) const {
+    if (handles_.empty() || lo >= hi) return;
+
+    const int count = g_freezeState.contextCount.load(std::memory_order_acquire);
+    for (int i = 0; i < count && i < kMaxFrozenThreads; ++i) {
+        auto* uc = g_freezeState.contexts[i].load(std::memory_order_acquire);
+        if (!uc) continue;
+
+        if (const auto ip = GetIP(uc); ip >= lo && ip < hi) {
+            SetIP(uc, dest);
+        }
+    }
+}
+
+auto ThreadFreezer::anyThreadInRange(const std::uint64_t lo, const std::uint64_t hi) const -> bool {
+    if (handles_.empty() || lo >= hi) return false;
+
+    const int count = g_freezeState.contextCount.load(std::memory_order_acquire);
+    for (int i = 0; i < count && i < kMaxFrozenThreads; ++i) {
+        auto* uc = g_freezeState.contexts[i].load(std::memory_order_acquire);
+        if (!uc) continue;
+        if (const auto ip = GetIP(uc); ip >= lo && ip < hi) return true;
+    }
+    return false;
 }
 
 void ThreadFreezer::reverseRemapThreadIPs(void* trampoline, void* target, std::span<const AlignEntry> alignMap) const {

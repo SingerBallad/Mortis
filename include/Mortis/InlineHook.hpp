@@ -72,9 +72,13 @@ public:
     /// @return Success or error.
     [[nodiscard]] auto enable() -> Result<void> {
         if (enabled_) return Result<void>::Ok();
-        auto       target = reinterpret_cast<void*>(targetFn_);
-        const auto detour = reinterpret_cast<void*>(detourFn_);
-        if (auto result = HookBackendImpl::Install(target, detour, priority_, originalPtrLocation_); !result)
+        auto       target        = reinterpret_cast<void*>(targetFn_);
+        const auto detour        = reinterpret_cast<void*>(detourFn_);
+        auto*      activeCounter = slotIndex_ >= 0 ? SlotMgr::Instance().activeCounter(slotIndex_) : nullptr;
+        const auto dispatchSpan  = slotIndex_ >= 0 ? SlotMgr::dispatchSpan(slotIndex_) : std::size_t{0};
+        if (auto result =
+                HookBackendImpl::Install(target, detour, priority_, originalPtrLocation_, activeCounter, dispatchSpan);
+            !result)
             return result;
         targetFn_ = reinterpret_cast<FnPtr>(target);
         enabled_  = true;
@@ -180,12 +184,16 @@ private:
 
         auto [slotIndex, rawFn] = *alloc;
 
-        auto       targetFn   = reinterpret_cast<FnPtr>(target);
-        auto       targetVoid = reinterpret_cast<void*>(targetFn);
-        const auto detourVoid = reinterpret_cast<void*>(rawFn);
-        auto*      origSlot   = pool.originalSlot(slotIndex);
+        auto       targetFn      = reinterpret_cast<FnPtr>(target);
+        auto       targetVoid    = reinterpret_cast<void*>(targetFn);
+        const auto detourVoid    = reinterpret_cast<void*>(rawFn);
+        auto*      origSlot      = pool.originalSlot(slotIndex);
+        auto*      activeCounter = pool.activeCounter(slotIndex);
+        const auto dispatchSpan  = SlotMgr::dispatchSpan(slotIndex);
 
-        if (auto installResult = HookBackendImpl::Install(targetVoid, detourVoid, priority, origSlot); !installResult) {
+        if (auto installResult =
+                HookBackendImpl::Install(targetVoid, detourVoid, priority, origSlot, activeCounter, dispatchSpan);
+            !installResult) {
             pool.release(slotIndex);
             return Result<InlineHookHandle<Sig>>::Err(installResult.code(), installResult.error());
         }

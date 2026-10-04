@@ -59,8 +59,8 @@ auto EnumerateFast(std::vector<void*>& handles) -> bool {
     while (true) {
         HANDLE   hNext  = nullptr;
         NTSTATUS status = ntGetNextThread(hProcess, hThread, kAccess, 0, 0, &hNext);
-        if (hThread) { 
-            CloseHandle(hThread); 
+        if (hThread) {
+            CloseHandle(hThread);
             hThread = nullptr;
         }
         if (status != 0) break; // STATUS_NO_MORE_ENTRIES or error
@@ -156,6 +156,33 @@ void ThreadFreezer::remapThreadIPs(
             }
         }
     }
+}
+
+void ThreadFreezer::remapRange(const std::uint64_t lo, const std::uint64_t hi, const std::uint64_t dest) const {
+    if (lo >= hi) return;
+
+    for (auto* h : handles_) {
+        CONTEXT ctx{};
+        ctx.ContextFlags = CONTEXT_CONTROL;
+        if (!GetThreadContext(h, &ctx)) continue;
+
+        if (const auto ip = GetIp(ctx); ip >= lo && ip < hi) {
+            SetIp(ctx, dest);
+            SetThreadContext(h, &ctx);
+        }
+    }
+}
+
+auto ThreadFreezer::anyThreadInRange(const std::uint64_t lo, const std::uint64_t hi) const -> bool {
+    if (lo >= hi) return false;
+
+    for (auto* h : handles_) {
+        CONTEXT ctx{};
+        ctx.ContextFlags = CONTEXT_CONTROL;
+        if (!GetThreadContext(h, &ctx)) continue;
+        if (const auto ip = GetIp(ctx); ip >= lo && ip < hi) return true;
+    }
+    return false;
 }
 
 void ThreadFreezer::reverseRemapThreadIPs(

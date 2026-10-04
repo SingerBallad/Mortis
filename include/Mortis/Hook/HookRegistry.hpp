@@ -3,6 +3,7 @@
 #include <Mortis/Config.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <mutex>
 #include <ranges>
@@ -18,10 +19,13 @@ struct AlignEntry {
 
 /// @brief A node in a hook chain, ordered by (priority, sequence).
 struct ChainNode {
-    int           priority            = 0;       ///< Lower = higher priority.
-    std::uint64_t sequence            = 0;       ///< Monotonic insertion counter (FIFO for same priority).
-    void*         detourRawFn         = nullptr; ///< Raw function pointer dispatching to the detour.
-    void**        originalPtrLocation = nullptr; ///< Where to write the next-in-chain address.
+    int               priority            = 0;       ///< Lower = higher priority.
+    std::uint64_t     sequence            = 0;       ///< Monotonic insertion counter (FIFO for same priority).
+    void*             detourRawFn         = nullptr; ///< Raw function pointer dispatching to the detour.
+    void**            originalPtrLocation = nullptr; ///< Where to write the next-in-chain address.
+    std::atomic<int>* activeCounter =
+        nullptr;                  ///< Slot's in-flight-call counter; drained before freeing the trampoline.
+    std::size_t dispatchSpan = 0; ///< Byte span of the dispatch stub, for removal's quiescence probe.
 
     auto operator<(const ChainNode& rhs) const noexcept -> bool {
         if (priority != rhs.priority) return priority < rhs.priority;
